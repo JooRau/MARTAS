@@ -24,8 +24,10 @@ MARTASPATH='/home/cobs/MARTAS/'
 # # The main acquisition program
 # # Please consider the space before options if provided"
 ACQU="acquisition.py"
-#ACQUOPT=""
+#Default
 ACQUOPT=" -m /home/cobs/martas.cfg"
+#Authentication
+#ACQUOPT=" -m /home/cobs/martas.cfg -c mqtt"
 PIDTEST="[a]cquisition.py$ACQUOPT"
 ACQUPROG="$ACQU$ACQUOPT"
 
