@@ -55,9 +55,6 @@ from magpy.opt import cred as mpcred
 
 ## Import Twisted for websocket and logging functionality
 from twisted.python import log
-from twisted.web.server import Site
-from twisted.web.static import File
-from twisted.internet import reactor
 
 import threading
 import struct
@@ -95,7 +92,11 @@ socketport = 5000
 
 ## Import WebsocketServer
 ## -----------------------------------------------------------
+
+global wsserver
+
 def wsThread():
+    global wsserver
     wsserver.set_fn_new_client(new_wsclient)
     wsserver.set_fn_message_received(message_received)
     wsserver.run_forever()
@@ -117,20 +118,7 @@ except:
 
 if ws_available:
     import json
-    # 0.0.0.0 makes the websocket accessable from anywhere TODO: not only 5000
-    print ("TEST", socketport)
-    wsserver = WebsocketServer(socketport, host='0.0.0.0')
-
-def webThread(webpath,webport):
-    # TODO absolut path or other solution?
-    resource = File(webpath)
-    factory = Site(resource)
-    #endpoint = endpoints.TCP4ServerEndpoint(reactor, 8888)
-    #endpoint.listen(factory)
-    reactor.listenTCP(webport,factory)
-    log.msg("collector: We don't need signals here - Webserver started as daemon")
-    reactor.run()
-
+## -----------------------------------------------------------
 
 def analyse_meta(header,sensorid):
     """
@@ -337,7 +325,10 @@ def on_message(client, userdata, msg):
                     time = num2date(el).replace(tzinfo=None)
                     msecSince1970 = int((time - datetime(1970,1,1)).total_seconds()*1000)
                     datastring = ','.join([str(val[idx]) for i,val in enumerate(stream.ndarray) if len(val) > 0 and not i == 0])
-                    wsserver.send_message_to_all("{}: {},{}".format(sensorid,msecSince1970,datastring))
+                    try:
+                        wsserver.send_message_to_all("{}: {},{}".format(sensorid,msecSince1970,datastring))
+                    except:
+                        print('wsserver not started yet')
             if 'stdout' in destination:
                 if not arrayinterpreted:
                     stream.ndarray = interprete_data(msg.payload, identifier, stream, sensorid)
@@ -388,7 +379,10 @@ def on_message(client, userdata, msg):
             jsonstr['elem'] = identifier[sensorid+':elemlist'][i]
             jsonstr['unit'] = identifier[sensorid+':unitlist'][i]
             payload = json.dumps(jsonstr)
-            wsserver.send_message_to_all('# '+payload)
+            try:
+                wsserver.send_message_to_all('# '+payload)
+            except:
+                print('wsserver not started yet')
 
 
 def main(argv):
@@ -595,17 +589,31 @@ def main(argv):
             sys.exit()
     if 'websocket' in destination:
         if ws_available:
+            # start webserver
+            import subprocess as sb
+            import os
+            # check out if the server is already running
+            proc1 = sb.Popen(['ps', 'ax'], stdout=sb.PIPE)
+            proc2 = sb.Popen(['grep', 'webserver.py'], stdin=proc1.stdout,stdout=sb.PIPE, stderr=sb.PIPE)
+            proc1.stdout.close()
+            out, err = proc2.communicate()
+            if not out=='':
+                pid = out.split(' ')[1]
+                os.kill(int(pid), 9)
+            log.msg("."+out+".")
+            sb.Popen(['/usr/bin/env','python','web/webserver.py',webpath,str(webport)])
+            # start websocket-server
+            print ("TEST", socketport)
+            # 0.0.0.0 makes the websocket accessable from anywhere TODO: not only 5000
+            global wsserver
+            wsserver = WebsocketServer(socketport, host='0.0.0.0')
             wsThr = threading.Thread(target=wsThread)
             # start as daemon, so the entire Python program exits when only daemon threads are left
             wsThr.daemon = True
             log.msg('starting websocket on port 5000...')
             wsThr.start()
-            # start webserver
-            webThr = threading.Thread(target=webThread, args=(webpath,webport))
-            webThr.daemon = True
-            webThr.start()
         else:
-            print("no webserver or no websocket-server available: remove 'websocket' from destination")
+            log.msg("no webserver or no websocket-server available: remove 'websocket' from destination")
             sys.exit()
     if 'db' in destination:
         if dbcred in [None,'']:
