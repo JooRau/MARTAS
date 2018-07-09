@@ -597,7 +597,9 @@ def main(argv):
             proc2 = sb.Popen(['grep', 'webserver.py'], stdin=proc1.stdout,stdout=sb.PIPE, stderr=sb.PIPE)
             proc1.stdout.close()
             out, err = proc2.communicate()
-            if not out=='':
+            if not out=='' and False:
+                # TODO besser!
+                print(out)
                 pid = out.split(' ')[1]
                 os.kill(int(pid), 9)
             log.msg("."+out+".")
