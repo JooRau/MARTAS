@@ -110,7 +110,7 @@ class LemiProtocol(LineReceiver):
         self.errorcnt = {'gps':'A', 'time':'0', 'buffer':0}
         self.buffer = ''
         self.gpsstate1 = 'A'
-        self.gpsstate2 = 'P'
+        self.gpsstate2 = 'Z'  # Initialize with Z so that current state is send when startet
         self.gpsstatelst = []
         flag = 0
         print ("Initializing LEMI finished")
@@ -131,6 +131,23 @@ class LemiProtocol(LineReceiver):
         y = int(x/16)*10 + x%16
         return y
 
+    def initiateRestart(self):
+        log.msg('LEMI - Protocol: Cannot fix problem - restarting process')
+        log.msg('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
+        self.buffer = ''
+        self.buffererrorcnt = 0
+        print (" ... performing restart now...") 
+        try:
+            # For some reason restart doesn't work?
+            print ("Running check_call...")
+            check_call(['/etc/init.d/martas', 'restart'])
+        except subprocess.CalledProcessError:
+            log.msg('LEMI - Protocol: check_call didnt work')
+        except:
+            log.msg('LEMI - Protocol: check call problem')
+        
+
+
     def processLemiData(self, data):
         """Convert raw ADC counts into SI units as per datasheets"""
         if len(data) != 153:
@@ -144,7 +161,7 @@ class LemiProtocol(LineReceiver):
         timestamp = datetime.strftime(currenttime, "%Y-%m-%d %H:%M:%S.%f")
         outtime = datetime.strftime(currenttime, "%H:%M:%S")
         datearray = acs.timeToArray(timestamp)
-        date_bin = struct.pack('6hL',datearray[0]-2000,datearray[1],datearray[2],datearray[3],datearray[4],datearray[5],datearray[6])
+        date_bin = struct.pack('<6hL',datearray[0]-2000,datearray[1],datearray[2],datearray[3],datearray[4],datearray[5],datearray[6])   ## Added "<" to pack code to get correct length in new machines
 
         # define pathname for local file storage 
         # (default dir plus hostname plus sensor plus year) and create if not existing
@@ -155,7 +172,9 @@ class LemiProtocol(LineReceiver):
 
         packcode = "<4cb6B8hb30f3BcBcc5hL"
         header = "LemiBin %s %s %s %s %s %s %d\n" % (self.sensor, '[x,y,z,t1,t2]', '[X,Y,Z,T_sensor,T_elec]', '[nT,nT,nT,deg_C,deg_C]', '[0.001,0.001,0.001,100,100]', packcode, struct.calcsize(packcode))
-        headforsend = "# MagPyBin {} {} {} {} {} {} {}\n".format(self.sensor, '[x,y,z,t1,t2,var1]', '[X,Y,Z,T_sensor,T_elec,VDD]', '[nT,nT,nT,deg_C,deg_C,V]', '[0.001,0.001,0.001,100,100,10]', packcode, struct.calcsize(packcode))
+        sendpackcode = '6hLffflll'
+        #headforsend = "# MagPyBin {} {} {} {} {} {} {}".format(self.sensor, '[x,y,z,t1,t2,var2,str1]', '[X,Y,Z,T_sensor,T_elec,VDD,GPS]', '[nT,nT,nT,deg_C,deg_C,V,Status]', '[0.001,0.001,0.001,100,100,10]', sendpackcode, struct.calcsize('<'+sendpackcode))
+        headforsend = "# MagPyBin {} {} {} {} {} {} {}".format(self.sensor, '[x,y,z,t1,t2,var2]', '[X,Y,Z,T_sensor,T_elec,VDD]', '[nT,nT,nT,deg_C,deg_C,V]', '[0.001,0.001,0.001,100,100,10]', sendpackcode, struct.calcsize('<'+sendpackcode))
 
         # save binary raw data to buffer file ### please note that this file always contains GPS readings
         lemipath = os.path.join(path,self.sensor+'_'+date+".bin")
@@ -197,13 +216,19 @@ class LemiProtocol(LineReceiver):
             log.err("LEMI - Protocol: Number conversion error.")
 
         #print ("HERE2", packcode, struct.calcsize(packcode))
+        processerror = False
         if not gpsstat in ['P','A']:
             print (" ERROR in BINDATA:", struct.unpack("<4cB6B8hb30f3BcB", data))
+            print (" Rawdata looks like:", data)
+            self.buffererrorcnt += 1
+            processerror = True
+            if self.buffererrorcnt == 10:
+                self.initiateRestart()
 
-        # get the most frequent gpsstate of the last 10 secs
+        # get the most frequent gpsstate of the last 10 min
         # this avoids error messages for singular one sec state changes
         self.gpsstatelst.append(gpsstat)
-        self.gpsstatelst = self.gpsstatelst[-10:]
+        self.gpsstatelst = self.gpsstatelst[-600:]
         self.gpsstate1 = max(set(self.gpsstatelst),key=self.gpsstatelst.count)
         if not self.gpsstate1 == self.gpsstate2:
             log.msg('LEMI - Protocol: GPSSTATE changed to %s .'  % gpsstat)
@@ -240,19 +265,26 @@ class LemiProtocol(LineReceiver):
             datalst = []
             tincr = idx/10.
             timear = gpstime+timedelta(seconds=tincr)
-            gps_time = datetime.strftime(timear, "%Y-%m-%d %H:%M:%S.%f")
+            gps_time = datetime.strftime(timear.replace(tzinfo=None), "%Y-%m-%d %H:%M:%S.%f")
             datalst = acs.timeToArray(gps_time)
             datalst.append(xarray[idx]/1000.)
             datalst.append(yarray[idx]/1000.)
             datalst.append(zarray[idx]/1000.)
-            datalst.append(temp_sensor*100)
-            datalst.append(temp_el*100)
-            datalst.append(vdd*10)
+            datalst.append(int(temp_sensor*100))
+            datalst.append(int(temp_el*100))
+            datalst.append(int(vdd*10))
+            ### TODO Add GPS and secondary time to this list
+            #datalst.append(gpsstat)
+            #current_time = datetime.strftime(currenttime.replace(tzinfo=None), "%Y-%m-%d %H:%M:%S.%f")
+            #datalst.extend(current_time)
             linestr = ','.join(list(map(str,datalst)))
             linelst.append(linestr)
         dataarray = ';'.join(linelst)
 
-        #print ("Processing successful")
+
+        if processerror:
+            print ("Processing unsuccessful")
+            dataarray = ''
 
         return dataarray, headforsend
 
@@ -277,11 +309,11 @@ class LemiProtocol(LineReceiver):
         if not (self.buffer).startswith(self.soltag):
             lemisearch = (self.buffer).find(self.soltag, 6)
             if not lemisearch == -1:
-                print "Lemiserach", lemisearch, self.buffer
+                print ("Lemisearch", lemisearch, self.buffer)
                 self.buffer = self.buffer[lemisearch:len(self.buffer)]
         if len(self.buffer) == 153:
             # Process data
-            print self.buffer
+            print (self.buffer)
             self.buffer = ''
         """
 
@@ -291,7 +323,8 @@ class LemiProtocol(LineReceiver):
                 currdata = self.buffer
                 self.buffer = ''
                 dataarray, head = self.processLemiData(currdata)
-                WSflag = 2
+                if not dataarray == '':
+                    WSflag = 2
 
             # 2. Found incorrect data length
 
@@ -343,20 +376,9 @@ class LemiProtocol(LineReceiver):
                                 self.buffer = self.buffer[lemisearch:len(self.buffer)]
                                 flag = 1
                                 self.buffererrorcnt += 1
-                                break
+                                #break #uncommented on 2018-09-11
                     if self.buffererrorcnt == 10:
-                        log.msg('LEMI - Protocol: Cannot fix problem - restarting process')
-                        log.msg('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
-                        self.buffer = ''
-                        self.buffererrorcnt = 0
-                        try:
-                            check_call(['/etc/init.d/martas', 'restart'])
-                        except subprocess.CalledProcessError:
-                            log.msg('LEMI - Protocol: check_call didnt work')
-                        except:
-                            log.msg('LEMI - Protocol: check call problem')
-                        log.msg('LEMI - Protocol: Restarted martas process')
-
+                        self.initiateRestart()
 
                 else:
                     log.msg('LEMI - Protocol: Incorrect header. Attempting to fix buffer... Bufferlength: {}'.format(len(self.buffer)))
@@ -370,7 +392,7 @@ class LemiProtocol(LineReceiver):
                         log.msg('LEMI - Protocol: Bad data ({} bits) deleted. New bufferlength: {}'.format(lemisearch,len(self.buffer)))
                         flag = 1
 
-            if flag == 0:
+            if flag in [0,1]: #flag == 0: #uncommented 2018-09-11
                 self.buffer = self.buffer + data
 
         except:
