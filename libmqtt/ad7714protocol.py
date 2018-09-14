@@ -76,7 +76,8 @@ SPI=spidev.SpiDev()
 SPI.open(0, 0)
 # no difference of SPI speed for RaspberryPi and AD7714
 # makes sense when using an oszilloscope
-#SPI.max_speed_hz=1000
+# RPi3B+ supports higher speeds, limiting for proper transmission
+SPI.max_speed_hz=500000
 print("max_speed_hz", SPI.max_speed_hz)
 
 # AD7714

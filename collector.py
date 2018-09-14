@@ -47,7 +47,7 @@ from __future__ import absolute_import
 local = True
 if local:
     import sys
-    sys.path.insert(1,'/home/leon/Software/magpy-git/')
+    sys.path.insert(1,'/home/pi/MARTAS/web/')
 
 from magpy.stream import DataStream, KEYLIST, NUMKEYLIST
 from magpy.database import mysql,writeDB
