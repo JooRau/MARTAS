@@ -47,39 +47,46 @@ from __future__ import absolute_import
 local = True
 if local:
     import sys
-    sys.path.insert(1,'/home/pi/MARTAS/web/')
+    sys.path.insert(1,'/home/leon/Software/magpy-git/')
 
-from magpy.stream import DataStream, KEYLIST, NUMKEYLIST
+from magpy.stream import DataStream, KEYLIST, NUMKEYLIST, subtractStreams
 from magpy.database import mysql,writeDB
 from magpy.opt import cred as mpcred
 
 ## Import Twisted for websocket and logging functionality
 from twisted.python import log
+from twisted.web.server import Site
+from twisted.web.static import File
+from twisted.internet import reactor
 
 import threading
+from multiprocessing import Process
 import struct
 from datetime import datetime 
 from matplotlib.dates import date2num, num2date
 import numpy as np
+import json
 
 # For file export
 import StringIO
 from magpy.acquisition import acquisitionsupport as acs
 
-#from magpy.collector import collectormethods as cm
-
 ## Import MQTT
 ## -----------------------------------------------------------
 import paho.mqtt.client as mqtt
-import sys, getopt
+import sys, getopt, os
 
 # Some global variables
 global identifier
 identifier = {}
 streamdict = {}
 stream = DataStream()
+st = []
+senslst = []
 headdict = {} # store headerlines for file
 headstream = {}
+global counter  # use for diffcalc
+counter = 0
 
 verifiedlocation = False
 destination = 'stdout'
@@ -92,11 +99,7 @@ socketport = 5000
 
 ## Import WebsocketServer
 ## -----------------------------------------------------------
-
-global wsserver
-
-def wsThread():
-    global wsserver
+def wsThread(wsserver):
     wsserver.set_fn_new_client(new_wsclient)
     wsserver.set_fn_message_received(message_received)
     wsserver.run_forever()
@@ -117,8 +120,46 @@ except:
     ws_available = False
 
 if ws_available:
-    import json
-## -----------------------------------------------------------
+    global wsserver
+
+def webProcess(webpath,webport):
+    """
+    These few lines will be started as an own process.
+    When the main process is killed, also this child process is killed
+    because of having it started as a daemon
+    """
+    resource = File(webpath)
+    factory = Site(resource)
+    #endpoint = endpoints.TCP4ServerEndpoint(reactor, 8888)
+    #endpoint.listen(factory)
+    reactor.listenTCP(webport,factory)
+    reactor.run()
+
+def connectclient(broker='localhost', port=1883, timeout=60, credentials='', user='', password=''):
+        """
+    connectclient method
+    used to connect to a specific client as defined by the input variables
+    eventually add multiple client -> {"clients":[{"broker":"192.168.178.42","port":"1883"}]} # json type
+                import json
+                altbro = json.loads(altbrocker)
+        """
+        client = mqtt.Client()
+        # Authentication part
+        if not credentials in ['','-']:
+            # use user and pwd from credential data if not yet set 
+            if user in ['',None,'None','-']: 
+                user = mpcred.lc(credentials,'user')
+            if password  in ['','-']:
+                password = mpcred.lc(credentials,'passwd')
+        if not user in ['',None,'None','-']: 
+            #client.tls_set(tlspath)  # check http://www.steves-internet-guide.com/mosquitto-tls/
+            client.username_pw_set(user, password=password)  # defined on broker by mosquitto_passwd -c passwordfile user
+        client.on_connect = on_connect
+        # on message needs: stationid, destination, location
+        client.on_message = on_message
+        client.connect(broker, port, timeout)
+        return client
+
 
 def analyse_meta(header,sensorid):
     """
@@ -212,6 +253,8 @@ def interprete_data(payload, ident, stream, sensorid):
     """
     source:mqtt:
     """
+    # future: check for json payload first
+    
     lines = payload.split(';') # for multiple lines send within one payload
     # allow for strings in payload !!
     array = [[] for elem in KEYLIST]
@@ -244,13 +287,17 @@ def on_connect(client, userdata, flags, rc):
         log.msg("Broker eventually requires authentication - use options -u and -P")
     # important obtain subscription from some config file or provide it directly (e.g. collector -a localhost -p 1883 -t mqtt -s wic)
     substring = stationid+'/#'
+    log.msg("Subscribing to: {}".format(substring))
     client.subscribe(substring,qos=qos)
 
 def on_message(client, userdata, msg):
     global verifiedlocation
     arrayinterpreted = False
-    sensorid = msg.topic.strip(stationid).replace('/','').strip('meta').strip('data').strip('dict')
+    sensorid = msg.topic.replace(stationid,"").replace('/','').replace('meta','').replace('data','').replace('dict','')
     # define a new data stream for each non-existing sensor
+    if not instrument == '':
+        if not sensorid.find(instrument) > -1:
+            return
     metacheck = identifier.get(sensorid+':packingcode','')
     if msg.topic.endswith('meta') and metacheck == '':
         log.msg("Found basic header:{}".format(str(msg.payload)))
@@ -288,21 +335,31 @@ def on_message(client, userdata, msg):
                 if sensorid in headdict:
                     header = headdict.get(sensorid)
                     packcode = metacheck.strip('<')[:-1] # drop leading < and final B
+                    # temporary code - too be deleted when lemi protocol has been updated
+                    if packcode.find('4cb6B8hb30f3Bc') >= 0:
+                        header = header.replace('<4cb6B8hb30f3BcBcc5hL 169\n','6hLffflll {}'.format(struct.calcsize('<6hLffflll')))
+                        packcode = '6hLffflll' 
                     arrayelem = msg.payload.split(';')
                     for ar in arrayelem:
                         datearray = ar.split(',')
                         # identify string values in packcode
                         # -------------------
-                        if not 's' in packcode:
-                            datearray = list(map(int, datearray))
-                        else:
-                            stringidx = []
-                            for i in range(len(packcode)):
-                                if packcode[-i] == 's':
-                                    stringidx.append(i)
-                            for i in range(len(datearray)):
-                                if not i in stringidx:
-                                    datearray[-i] = int(datearray[-i])
+                        # convert packcode numbers
+                        cpack = []
+                        for c in packcode:
+                            if c.isdigit():
+                                digit = int(c)
+                            else:
+                                cpack.extend([c] * digit)
+                                digit=1
+                        cpackcode = "".join(cpack) 
+                        for i in range(len(cpackcode)):
+                            if cpackcode[-i] == 's':
+                                datearray[-i] = datearray[-i]
+                            elif cpackcode[-i] == 'f':
+                                datearray[-i] = float(datearray[-i])
+                            else:
+                                datearray[-i] = int(float(datearray[-i]))
                         # pack data using little endian byte order
                         data_bin = struct.pack('<'+packcode,*datearray)
                         # Check whether destination path has been verified already 
@@ -325,10 +382,63 @@ def on_message(client, userdata, msg):
                     time = num2date(el).replace(tzinfo=None)
                     msecSince1970 = int((time - datetime(1970,1,1)).total_seconds()*1000)
                     datastring = ','.join([str(val[idx]) for i,val in enumerate(stream.ndarray) if len(val) > 0 and not i == 0])
-                    try:
-                        wsserver.send_message_to_all("{}: {},{}".format(sensorid,msecSince1970,datastring))
-                    except:
-                        print('wsserver not started yet')
+                    wsserver.send_message_to_all("{}: {},{}".format(sensorid,msecSince1970,datastring))
+            if 'diff' in destination:
+                global counter
+                counter+=1
+                global number
+                amount = int(number)
+                cover = 5
+                if not arrayinterpreted:
+                    ar = interprete_data(msg.payload, identifier, stream, sensorid)
+                    if not sensorid in senslst:
+                        senslst.append(sensorid)
+                        st.append(DataStream([],{},ar))
+                    idx = senslst.index(sensorid)
+                    st[idx].extend(stream.container,{'SensorID':sensorid},ar)
+                    arrayinterpreted = True
+                st[idx].ndarray = np.asarray([np.asarray(el[-cover:]) for el in st[idx].ndarray])
+                if len(st) < 2:
+                     print ("Not enough streams for subtraction yet")
+                try:
+                    if counter > amount:
+                        counter = 0
+                        sub = subtractStreams(st[0],st[1])
+                        try:
+                            part1 = (st[0].header.get('SensorID').split('_')[1])
+                        except:
+                            part1 = 'unkown'
+                        try:
+                            part2 = (st[1].header.get('SensorID').split('_')[1])
+                        except:
+                            part2 = 'unkown'
+                        name = "Diff_{}-{}_0001".format(part1,part2)
+                        # get head line for pub
+                        #name = "diff_xxx_0001"
+                        keys = sub._get_key_headers(numerical=True)
+                        ilst = [KEYLIST.index(key) for key in keys]
+                        keystr = "[{}]".format(",".join(keys))                     
+                        #takeunits =  ### take from st[0]
+                        packcode = "6hL{}".format("".join(['l']*len(keys)))
+                        multi = "[{}]".format(",".join(['1000']*len(keys)))
+                        unit = "[{}]".format(",".join(['arb']*len(keys)))
+                        head = "# MagPyBin {} {} {} {} {} {} {}".format(name, keystr, keystr, unit, multi, packcode, struct.calcsize('<'+packcode))
+                        #print (head)
+                        # get data line for pub
+                        time = sub.ndarray[0][-1]
+                        timestr = (datetime.strftime(num2date(float(time)).replace(tzinfo=None), "%Y,%m,%d,%H,%M,%S,%f"))
+                        val = [sub.ndarray[i][-1] for i in ilst]
+                        if len(val) > 1:
+                            valstr = ",".join(int(val*1000))
+                        else:
+                            valstr = int(val[0]*1000)
+                        data = "{},{}".format(timestr,valstr)
+                        #print (data)
+                        topic = "wic/{}".format(name)
+                        client.publish(topic+"/data", data, qos=0)
+                        client.publish(topic+"/meta", head, qos=0)
+                except:
+                    print ("Found error in subtraction")
             if 'stdout' in destination:
                 if not arrayinterpreted:
                     stream.ndarray = interprete_data(msg.payload, identifier, stream, sensorid)
@@ -349,7 +459,9 @@ def on_message(client, userdata, msg):
                 stream.header = headstream[sensorid]
                 if debug:
                     log.msg("writing header: {}".format(headstream[sensorid]))
-                writeDB(db,stream)
+                # Could be handled by an option like revision="0001"
+                # if revision: as below else writeDB(db,stream)
+                writeDB(db,stream,tablename="{}_{}".format(sensorid,'0001'))
                 #sys.exit()
             elif 'stringio' in destination:
                 if not arrayinterpreted:
@@ -379,19 +491,14 @@ def on_message(client, userdata, msg):
             jsonstr['elem'] = identifier[sensorid+':elemlist'][i]
             jsonstr['unit'] = identifier[sensorid+':unitlist'][i]
             payload = json.dumps(jsonstr)
-            try:
-                wsserver.send_message_to_all('# '+payload)
-            except:
-                print('wsserver not started yet')
+            wsserver.send_message_to_all('# '+payload)
 
 
 def main(argv):
-    #broker = '192.168.178.75'
     broker = 'localhost'  # default
-    #broker = '192.168.178.84'
-    #broker = '192.168.0.14'
     port = 1883
     timeout=60
+    altbroker = ''
     user = ''
     password = ''
     logging = 'sys.stdout'
@@ -407,6 +514,8 @@ def main(argv):
     dbcred=''
     global stationid
     stationid = 'wic'
+    global instrument
+    instrument = ''
     global source
     source='mqtt' # projected sources: mqtt (default), wamp, mysql, postgres, etc
     global qos
@@ -421,10 +530,12 @@ def main(argv):
     global dictcheck
     dictcheck = False
     global socketport
+    global number
+    number=1
 
-    usagestring = 'collector.py -b <broker> -p <port> -t <timeout> -o <topic> -d <destination> -l <location> -c <credentials> -r <dbcred> -q <qos> -u <user> -P <password> -s <source> -f <offset> -m <marcos>'
+    usagestring = 'collector.py -b <broker> -p <port> -t <timeout> -o <topic> -i <instrument> -d <destination> -l <location> -c <credentials> -r <dbcred> -q <qos> -u <user> -P <password> -s <source> -f <offset> -m <marcos> -n <number>'
     try:
-        opts, args = getopt.getopt(argv,"hb:p:t:o:d:l:c:r:q:u:P:s:f:m:U",["broker=","port=","timeout=","topic=","destination=","location=","credentials=","dbcred=","qos=","debug=","user=","password=","source=","offset=","marcos="])
+        opts, args = getopt.getopt(argv,"hb:p:t:o:i:d:l:c:r:q:u:P:s:f:m:n:U",["broker=","port=","timeout=","topic=","instrument=","destination=","location=","credentials=","dbcred=","qos=","debug=","user=","password=","source=","offset=","marcos=","number="])
     except getopt.GetoptError:
         print ('Check your options:')
         print (usagestring)
@@ -442,6 +553,10 @@ def main(argv):
             print ('-t                             set timeout - default is 60')
             print ('-o                             set base topic - for MARTAS this corresponds')
             print ('                               to the station ID (e.g. wic)')
+            print ('-i                             choose instrument(s) - only sensors containing')
+            print ('                               the provided string are used: ')
+            print ('                               -i GSM  will access GSM90_xxx and GSM19_xyz ')
+            print ('                               Default is to use all')
             print ('-d                             set destination - std.out, db, file') 
             print ('                               default is std.out') 
             print ('-l                             set location depending on destination')
@@ -460,6 +575,9 @@ def main(argv):
             print ('                               other options:')
             print ('-m                             marcos configuration file ')
             print ('                               e.g. "/home/cobs/marcos.cfg"')
+            print ('-n                             provide a integer number ')
+            print ('                               "-d diff -i GSM": difference of two GSM will')
+            print ('                                                 be calculated every n th step.')
             print ('------------------------------------------------------')
             print ('Examples:')
             print ('1. Basic')
@@ -476,6 +594,9 @@ def main(argv):
             print ('6. Overriding individual parameters from config file')
             print ('   python collector.py -m "/path/to/marcos.cfg" -b "192.168.0.100"')
             print ('   (make sure that config is called first)')
+            print ('7. Calculating differences/gradients on the fly:')
+            print ('   python collector.py -d diff -i G823A -n 10')
+            print ('   (will calculate the diffs of two G823A every 10th record)')
             sys.exit()
         elif opt in ("-m", "--marcos"):
             marcosfile = arg
@@ -507,10 +628,15 @@ def main(argv):
                 offset = conf.get('offset').strip()
             if not conf.get('debug','') in ['','-']:
                 debug = conf.get('debug').strip()
+                if debug in ['True','true']:
+                    debug = True
+                else:
+                    debug = False
             if not conf.get('socketport','') in ['','-']:
                 try:
                     socketport = int(conf.get('socketport').strip())
                 except:
+                    print('socketport not read properly from marcos config file')
                     socketport = 5000
             source='mqtt'
         elif opt in ("-b", "--broker"):
@@ -527,6 +653,8 @@ def main(argv):
                 timeout = arg
         elif opt in ("-o", "--topic"):
             stationid = arg
+        elif opt in ("-i", "--instrument"):
+            instrument = arg
         elif opt in ("-s", "--source"):
             source = arg
         elif opt in ("-d", "--destination"):
@@ -548,6 +676,8 @@ def main(argv):
             password = arg
         elif opt in ("-f", "--offset"):
             offset = arg
+        elif opt in ("-n", "--number"):
+            number = arg
         elif opt in ("-U", "--debug"):
             debug = True
 
@@ -589,33 +719,21 @@ def main(argv):
             sys.exit()
     if 'websocket' in destination:
         if ws_available:
-            # start webserver
-            import subprocess as sb
-            import os
-            # check out if the server is already running
-            proc1 = sb.Popen(['ps', 'ax'], stdout=sb.PIPE)
-            proc2 = sb.Popen(['grep', 'webserver.py'], stdin=proc1.stdout,stdout=sb.PIPE, stderr=sb.PIPE)
-            proc1.stdout.close()
-            out, err = proc2.communicate()
-            if not out=='' and False:
-                # TODO besser!
-                print(out)
-                pid = out.split(' ')[1]
-                os.kill(int(pid), 9)
-            log.msg("."+out+".")
-            sb.Popen(['/usr/bin/env','python','web/webserver.py',webpath,str(webport)])
-            # start websocket-server
-            print ("TEST", socketport)
-            # 0.0.0.0 makes the websocket accessable from anywhere TODO: not only 5000
+            # 0.0.0.0 makes the websocket accessable from anywhere
             global wsserver
             wsserver = WebsocketServer(socketport, host='0.0.0.0')
-            wsThr = threading.Thread(target=wsThread)
-            # start as daemon, so the entire Python program exits when only daemon threads are left
+            wsThr = threading.Thread(target=wsThread,args=(wsserver,))
+            # start websocket-server in a thread as daemon, so the entire Python program exits
             wsThr.daemon = True
-            log.msg('starting websocket on port 5000...')
+            log.msg('starting websocket on port '+str(socketport))
             wsThr.start()
+            # start webserver as process, also as daemon (kills process, when main program ends)
+            webPr = Process(target=webProcess, args=(webpath,webport))
+            webPr.daemon = True
+            webPr.start()
+            log.msg('starting webserver on port '+str(webport))
         else:
-            log.msg("no webserver or no websocket-server available: remove 'websocket' from destination")
+            print("no webserver or no websocket-server available: remove 'websocket' from destination")
             sys.exit()
     if 'db' in destination:
         if dbcred in [None,'']:
@@ -640,22 +758,9 @@ def main(argv):
         log.msg("Destination: {} {}".format(destination, location))
 
     if source == 'mqtt':
-        client = mqtt.Client()
-        # Authentication part
-        if not credentials in ['','-']:
-            # use user and pwd from credential data if not yet set 
-            if user in ['',None,'None','-']: 
-                user = mpcred.lc(credentials,'user')
-            if password  in ['','-']:
-                password = mpcred.lc(credentials,'passwd')
-        if not user in ['',None,'None','-']: 
-            #client.tls_set(tlspath)  # check http://www.steves-internet-guide.com/mosquitto-tls/
-            client.username_pw_set(user, password=password)  # defined on broker by mosquitto_passwd -c passwordfile user
-        client.on_connect = on_connect
-        # on message needs: stationid, destination, location
-        client.on_message = on_message
-        client.connect(broker, port, timeout)
+        client = connectclient(broker, port, timeout, credentials, user, password)
         client.loop_forever()
+
     elif source == 'wamp':
         log.msg("Not yet supported! -> check autobahn import, crossbario")
     else:
