@@ -23,12 +23,12 @@ MARTASPATH='/home/pi/MARTAS/'
 
 # # The main acquisition program
 # # Please consider the space before options if provided"
-ACQU="acquisition.py"
+ACQU="collector.py"
 #Default
-ACQUOPT=" -m /home/pi/martas.cfg"
+ACQUOPT=" -m /home/pi/marcos.cfg"
 #Authentication
 #ACQUOPT=" -m /home/cobs/martas.cfg -c mqtt"
-PIDTEST="[a]cquisition.py$ACQUOPT"
+PIDTEST="[c]ollector.py$ACQUOPT"
 ACQUPROG="$ACQU$ACQUOPT"
 
 # # change delay (necessary for systemstart and proper restart)
