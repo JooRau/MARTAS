@@ -132,6 +132,8 @@ def webProcess(webpath,webport):
     factory = Site(resource)
     #endpoint = endpoints.TCP4ServerEndpoint(reactor, 8888)
     #endpoint.listen(factory)
+    # args! -> make an integer out of it
+    webport = int(webport)
     reactor.listenTCP(webport,factory)
     reactor.run()
 
@@ -638,6 +640,14 @@ def main(argv):
                 except:
                     print('socketport not read properly from marcos config file')
                     socketport = 5000
+            if not conf.get('webport','') in ['','-']:
+                try:
+                    webport = conf.get('webport').strip()
+                except:
+                    print('webport not read properly from marcos config file')
+                    webport = 8080
+            if not conf.get('webpath','') in ['','-']:
+                webpath = conf.get('webpath').strip()
             source='mqtt'
         elif opt in ("-b", "--broker"):
             broker = arg
