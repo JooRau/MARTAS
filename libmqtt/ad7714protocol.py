@@ -25,7 +25,7 @@ from __future__ import print_function
 #   6 .. 64
 #   7 .. 128
 
-GAIN = 2
+GAIN = 1
 
 ###### please don't edit beyond this line ######
 
@@ -102,7 +102,7 @@ CHANNEL = 4
 # wordlength 16bit:0 24bit:1
 BIT = 1
 # Filter sets sampling rate. Depends on system clock
-FILTER = 0x300
+FILTER = 0x0c0
 
 # init watchdog
 watchdog = {}
