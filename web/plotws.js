@@ -37,7 +37,11 @@
         smoothieloaded = 1;
     }
 
-    loadSmoothie('smoothie.js', getsettings);
+    var loadSmoothie = function () {
+        jsImport('smoothie.js', smoothieLoaded);
+    }
+
+    jsImport('smoothiesettings.js',loadSmoothie);
 
     function getCanvas(signalid) {
         try {
