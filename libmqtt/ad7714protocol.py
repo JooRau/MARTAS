@@ -68,8 +68,9 @@ DRDY=32
 GPIO.setup(DRDY,GPIO.IN)
 # define pin7 as output for /RESET
 RESET=7
-GPIO.setup(RESET,GPIO.OUT)
-GPIO.output(RESET,GPIO.HIGH)
+GPIO.setup(RESET,GPIO.OUT,initial=GPIO.HIGH)
+# next line not needed anymore - 'initial' prevents a reset when starting a second instance of ad7714protocol
+#GPIO.output(RESET,GPIO.HIGH)
 
 # setup spi
 SPI=spidev.SpiDev()
