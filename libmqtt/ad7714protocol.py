@@ -409,7 +409,48 @@ def interruptRead(s):
         acs.dataToFile(Objekt.confdict.get('bufferdirectory'), sensorid, filedate, data_bin, header)
 
     # VIA MQTT
-    sendData.sendData(Objekt,sensorid, ','.join(list(map(str,darray))), header)
+    # instead of external program file TODO: better!
+    #def sendData(self, sensorid, data, head, stack=None):
+    #sendData.sendData(Objekt,sensorid, ','.join(list(map(str,darray))), header)
+    data=','.join(list(map(str,darray)))
+    head=header
+    # TODO: implement stack correctly!
+    stack=1
+
+    topic = Objekt.confdict.get('station') + '/' + sensorid
+    senddata = False
+    if not stack:
+        stack = int(Objekt.sensordict.get('stack'))
+    coll = stack
+
+    if coll > 1:
+        Objekt.metacnt = 1 # send meta data with every block
+        if Objekt.datacnt < coll:
+            Objekt.datalst.append(data)
+            Objekt.datacnt += 1
+        else:
+            senddata = True
+            data = ';'.join(Objekt.datalst)
+            Objekt.datalst = []
+            Objekt.datacnt = 0
+    else:
+        senddata = True
+
+    if senddata:
+            if Objekt.count == 0:
+                # get all values initially from the database
+                #add = "SensoriD:{},StationID:{},DataPier:{},SensorModule:{},SensorGroup:{},SensorDecription:{},DataTimeProtocol:{}".format( sensorid, self.confdict.get('station',''),self.sensordict.get('pierid',''), self.sensordict.get('protocol',''),self.sensordict.get('sensorgroup',''),self.sensordict.get('sensordesc',''), self.sensordict.get('ptime','') )
+                #self.client.publish(topic+"/dict", add, qos=self.qos)
+                Objekt.client.publish(topic+"/meta", head, qos=Objekt.qos)
+                if Objekt.debug:
+                    log.msg("  -> DEBUG - Publishing meta --", topic, head)
+            Objekt.client.publish(topic+"/data", data, qos=Objekt.qos)
+            if Objekt.debug:
+                log.msg("  -> DEBUG - Publishing data")
+            Objekt.count += 1
+            if Objekt.count >= Objekt.metacnt:
+                Objekt.count = 0
+
 
 
 def readData(channel=4):
@@ -486,7 +527,20 @@ class ad7714Protocol():
 
     def __init__(self, client, sensordict, confdict):
 
-        sendData.setDefaults(self, client, sensordict, confdict)
+        # set defaults for mqtt
+        #sendData.setDefaults(self, client, sensordict, confdict)
+        self.qos = 0
+        self.debug = False
+        self.client = client
+        self.sensordict = sensordict
+        self.confdict = confdict
+        # variables for broadcasting via mqtt:
+        self.count=0
+        self.datalst = []
+        self.datacnt = 0
+        self.metacnt = 10
+
+
         # reset AD7714
         print('AD7714Protocol: resetting AD7714...')
         reset()
