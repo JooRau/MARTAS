@@ -90,8 +90,10 @@ class lorawanserver_status(object):
             header['ip']  = customdatadict.get('ip')
             # sensorid = header['SensorName'][:5].replace('-','') + '_' + header['SensorSerialNum'] + '_0001'
             # header['SensorID'] = sensorid
-            sensorid = "Gateway_" + mac + "_" + self.topicidentifier['endswith'] + '_1000'
+            # JF rm sensorid = "Gateway_" + mac + "_" + self.topicidentifier['endswith'] + '_0001'
+            sensorid = "Gateway_{}_0001".format(mac)
             header['SensorID'] = sensorid
+            header['StationID'] = mac
             rxPR   = loradict.get('rxPacketsReceived')
             rxPROK = loradict.get('rxPacketsReceivedOK')
             txPR   = loradict.get('txPacketsReceived')
@@ -101,7 +103,7 @@ class lorawanserver_status(object):
             """
             """
             # JF NO string: datadict = {"rxPacketsReceived":rxPR, "rxPacketsReceivedOK":rxPROK, "txPacketsReceived":txPR, "txPacketsEmitted":txPE, customData':["ip",ip]}
-            datadict = {"rxPacketsReceived":rxPR, "rxPacketsReceivedOK":rxPROK, "txPacketsReceived":txPR, "txPacketsEmitted":txPE]}
+            datadict = {"rxPacketsReceived":rxPR, "rxPacketsReceivedOK":rxPROK, "txPacketsReceived":txPR, "txPacketsEmitted":txPE}
             keylist, elemlist, unitlist, multilist = [],[],[],[]
             if not loradict.get('time','') == '':
                 """ 2018-12-14T16:10:16Z """
