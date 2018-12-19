@@ -59,12 +59,26 @@ class lorawanserver_status(object):
         """
         print ("  -> Initializing loraWAN server routines status 'stats' ...")
         self.topicidentifier = {'startswith':'gateway','endswith':'stats'}
+        """
+        Datakeytranslator links predefined columns of the magpy-dataobject (see KEYLIST) to
+        actual data of the selected sensor.
+        Vector data should be assigend to 'x', 'y', 'z' columns.
+        EXAMPLE:
+                'tl'          :   ['t1'   ,      'degC']
+        Name in transmission      magpy KEY      unit of transmission
+          'rxPacketsReceived' :   ['var1',      'int']
+
+        POSSIBLE KEYS: x,y,z,f,t1,t2,var1,...,var5,dx,dy,dz,df for numerical values
+                  use xyz for vectors, use dxdydz asociated errors
+                  use f and df for scalar with asociated error
+                  use others as you like
+        """
         self.stats_datakeytranslator = {
-                'rxPacketsReceived':['rxPR1','int'], 
-                'rxPacketsReceivedOK':['rxPRO','int'], 
-                'txPacketsReceived':['txPR','int'], 
-                'txPacketsEmitted':['txPE','int'],
-                'customData':[{'ip':'ip'}]
+                'rxPacketsReceived':['var1','int'], 
+                'rxPacketsReceivedOK':['var2','int'], 
+                'txPacketsReceived':['var3','int'], 
+                'txPacketsEmitted':['var4','int'],
+                'IP':['var5','ip']
                 }
         self.identifier = {}
         self.headdict = {}
@@ -80,7 +94,7 @@ class lorawanserver_status(object):
     
     def loradict2datastruct(self, loradict):
         # JF NO string: stats_datakeytranslator = { 'rxPacketsReceived':['rxPR1','int'], 'rxPacketsReceivedOK':['rxPRO','int'], 'txPacketsReceived':['txPR','int'], 'txPacketsEmitted':['txPE','int'], 'customData':['ip','ipv4']}
-            stats_datakeytranslator = { 'rxPacketsReceived':['rxPR1','int'], 'rxPacketsReceivedOK':['rxPRO','int'], 'txPacketsReceived':['txPR','int'], 'txPacketsEmitted':['txPE','int']}
+            stats_datakeytranslator = self.stats_datakeytranslator
             # customdatadict = loradict.get('customData')[0]
             # JF NO is no object => removed: [0]
             customdatadict = loradict.get('customData')
@@ -98,12 +112,13 @@ class lorawanserver_status(object):
             rxPROK = loradict.get('rxPacketsReceivedOK')
             txPR   = loradict.get('txPacketsReceived')
             txPE   = loradict.get('txPacketsEmitted')
-            ip = '.'.join([i.zfill(3) for i in customdatadict.get('ip').split('.')])
-            dataline      = {"rxPacketsReceived":rxPR,"rxPacketsReceivedOK":rxPROK,"txPacketsReceived":txPR,"txPacketsEmitted":txPE}
+            ip = ''.join([i.zfill(3) for i in customdatadict.get('ip').split('.')])
+            #print (ip)
+            dataline      = {"rxPacketsReceived":rxPR,"rxPacketsReceivedOK":rxPROK,"txPacketsReceived":txPR,"txPacketsEmitted":txPE,"IP":ip}
             """
             """
             # JF NO string: datadict = {"rxPacketsReceived":rxPR, "rxPacketsReceivedOK":rxPROK, "txPacketsReceived":txPR, "txPacketsEmitted":txPE, customData':["ip",ip]}
-            datadict = {"rxPacketsReceived":rxPR, "rxPacketsReceivedOK":rxPROK, "txPacketsReceived":txPR, "txPacketsEmitted":txPE}
+            datadict = {"rxPacketsReceived":rxPR, "rxPacketsReceivedOK":rxPROK, "txPacketsReceived":txPR, "txPacketsEmitted":txPE,"IP":ip}
             keylist, elemlist, unitlist, multilist = [],[],[],[]
             if not loradict.get('time','') == '':
                 """ 2018-12-14T16:10:16Z """
@@ -122,12 +137,17 @@ class lorawanserver_status(object):
                     keylist.append(key)
                     elemlist.append(elem)
                     unitlist.append(unit)
-                    multilist.append(1000)
                     packstr += "l"
-                    if type(datadict[elem]) == int:
-                        datalst.append(int(datadict[elem]*1000))   
+                    if not elem == 'IP':
+                        multilist.append(1000)
+                        if type(datadict[elem]) == int:
+                            datalst.append(int(datadict[elem]*1000))   
+                        else:
+                            datalst.append(str(datadict[elem]))
                     else:
-                        datalst.append(str(datadict[elem]))   
+                        multilist.append(1)
+                        datalst.append(int(datadict[elem]))   
+
                 # print (elem, datadict[elem])
             
             datalst = [str(elem) for elem in datalst]
@@ -150,10 +170,10 @@ class lorawanserver_status(object):
                 return line
             
             headline = identifier2line(self.identifier, sensorid)
-            print ('dataline', dataline)
-            print ('sensorid', sensorid)
-            print ('headline', headline)
-            print ('header', header)
-            print ("success")
+            #print ('dataline', dataline)
+            #print ('sensorid', sensorid)
+            #print ('headline', headline)
+            #print ('header', header)
+            #print ("success")
             
             return dataline, sensorid, headline, header
