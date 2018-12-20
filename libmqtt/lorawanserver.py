@@ -77,6 +77,7 @@ class lorawanserver(object):
             header['SensorID'] = sensorid
             header['StationID'] = rxdict.get('gatewayID','undefined')
             header['StationName'] = rxdict.get('name','undefined')
+            header['DataPier'] = loradict.get('devEUI','')
 
             header['StationLongitude'] = locdict.get('longitude','')
             header['StationLatitude'] = locdict.get('latitude','')

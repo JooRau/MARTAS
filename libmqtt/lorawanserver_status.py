@@ -102,6 +102,7 @@ class lorawanserver_status(object):
             header = {}
             header['mac'] = loradict.get('mac')
             header['ip']  = customdatadict.get('ip')
+            header['DataPier'] = loradict.get('mac')
             # sensorid = header['SensorName'][:5].replace('-','') + '_' + header['SensorSerialNum'] + '_0001'
             # header['SensorID'] = sensorid
             # JF rm sensorid = "Gateway_" + mac + "_" + self.topicidentifier['endswith'] + '_0001'
