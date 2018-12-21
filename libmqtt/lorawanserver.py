@@ -55,7 +55,7 @@ application/3/node/0018b22000000357/rx {"applicationID":"3","applicationName":"T
         #self.payload = payload
         #self.topic = topic
         self.topicidentifier = {'startswith':'application','endswith':'rx'}
-        self.datakeytranslator = {'sensorA':['sensorA','mA'], 'tl':['t1','degC'], 'sensorB':['sensorB','mA'], 'rf':['var1','per'], 'corr':['var5','none']}
+        self.datakeytranslator = {'datacode':['datacode','base64'], 'sensorA':['sensorA','mA'], 'tl':['t1','degC'], 'sensorB':['sensorB','mA'], 'rf':['var1','per'], 'corr':['var5','none']}
         self.identifier = {}
         self.headdict = {}
         self.headstream = {}
@@ -77,7 +77,7 @@ application/3/node/0018b22000000357/rx {"applicationID":"3","applicationName":"T
     def b2vAB(self,b1,b2,b3,off):
                 v = ((b1 << 8) + b2 << 8) + b3
                 # val = (v/100000. *6.25) - off
-                val = (v *10)
+                val = (v/100000.)
                 return val
 
     def loradict2datastruct(self, loradict):
@@ -164,7 +164,7 @@ application/3/node/0018b22000000357/rx {"applicationID":"3","applicationName":"T
                         datalst.append(int(datadict[elem]))   
                     # if is int datadict[elem]
                     # datalst.append(int(datadict[elem]*1000))   
-                # print (elem, datadict[elem])
+                print (elem, datadict[elem])
 
             datalst = [str(elem) for elem in datalst]
             dataline =','.join(datalst)
