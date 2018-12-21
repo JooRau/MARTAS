@@ -19,6 +19,10 @@ def datetime2array(t):
 ##
 class lorawanserver(object):
     """
+v00.01.01
+application/3/node/0018b22000000357/rx {"applicationID":"3","applicationName":"Temperature-and-Humidity","deviceName":"TITEC-MS-01","devEUI":"0018b22000000357","rxInfo":[{"gatewayID":"00800000a0002b21","name":"MTCDT_AEPGW-03","rssi":-42,"loRaSNR":7.8,"location":{"latitude":48.248422399999995,"longitude":16.3520512,"altitude":0}}],"txInfo":{"frequency":868500000,"dr":5},"adr":true,"fCnt":1632,"fPort":1,"data":"QmASDjI4IhN2nw==","object":{"humitidy":54.721937499999996,"temperature":3.1474999999999937}}
+
+v00.00.01
     application/3/node/0018b2200000034a/rx {"applicationID":"3","applicationName":"Temperature-and-Humidity","deviceName":"TITEC-Multisensor","devEUI":"0018b2200000034a","rxInfo":[{"gatewayID":"00800000a0001285","name":"MTCDT_AEPGW2","rssi":-49,"loRaSNR":7.2,"location":{"latitude":48.248422399999995,"longitude":16.3520512,"altitude":0}}],"txInfo":{"frequency":868500000,"dr":5},"adr":true,"fCnt":457,"fPort":1,"data":"QgASEzQVIg/HVA=="}
 
     content suggestion: appeui, deveui, sensorname, locationname, sensormodell, -> rest beelike
@@ -64,6 +68,10 @@ class lorawanserver(object):
                 return val
 
     def loradict2datastruct(self, loradict):
+	    ''' 
+v00.01.01
+application/3/node/0018b22000000357/rx {"applicationID":"3","applicationName":"Temperature-and-Humidity","deviceName":"TITEC-MS-01","devEUI":"0018b22000000357","rxInfo":[{"gatewayID":"00800000a0002b21","name":"MTCDT_AEPGW-03","rssi":-42,"loRaSNR":7.8,"location":{"latitude":48.248422399999995,"longitude":16.3520512,"altitude":0}}],"txInfo":{"frequency":868500000,"dr":5},"adr":true,"fCnt":1632,"fPort":1,"data":"QmASDjI4IhN2nw==","object":{"humitidy":54.721937499999996,"temperature":3.1474999999999937}}
+            '''
             datakeytranslator = {'tl':['t1','degC'], 'rf':['var1','per'], 'corr':['var5','none'], 'bat':['var4','per']}
             rxdict = loradict.get('rxInfo')[0]
             locdict = rxdict.get('location')
@@ -73,11 +81,11 @@ class lorawanserver(object):
             header['SensorDescription'] = loradict.get('applicationName','not specified')
             header['SensorSerialNum'] = loradict.get('devEUI','')
             header['SensorGroup'] = loradict.get('deviceName','LORA')
-            sensorid = header['SensorName'][:5].replace('-','') + '_' + header['SensorSerialNum'] + '_0001'
+            sensorid = header['SensorName'][:11].replace('-','') + '_' + header['SensorSerialNum'] + '_0001'
             header['SensorID'] = sensorid
             header['StationID'] = rxdict.get('gatewayID','undefined')
             header['StationName'] = rxdict.get('name','undefined')
-            header['DataPier'] = loradict.get('devEUI','')
+            header['DataPier'] = loradict.get('name','')
 
             header['StationLongitude'] = locdict.get('longitude','')
             header['StationLatitude'] = locdict.get('latitude','')
