@@ -121,7 +121,7 @@ application/3/node/0018b22000000357/rx {"applicationID":"3","applicationName":"T
                 sensorA = self.b2vAB(barray[3],barray[4],barray[5],55)
                 rf = self.b2v(barray[7],barray[8],barray[9],25)
                 sensorB = self.b2vAB(barray[7],barray[8],barray[9],25)
-                datadict = {"datacode":"datacode", "sensorA":sensorA, "tl":temp, "sensorB":sensorB, "rf":rf}
+                datadict = {"datacode":datacode, "sensorA":sensorA, "tl":temp, "sensorB":sensorB, "rf":rf}
             elif len(barray) == 7:
                 print ("Found Bytearray 7 with code", datacode)
                 temp = self.b2v7(barray[1],barray[2],100)
