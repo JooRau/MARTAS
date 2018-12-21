@@ -29,28 +29,6 @@ class lorawanserver_status(object):
 
        mosquitto_sub -h 138.22.165.37 -t "#" -v |grep stats
        gateway/00800000a0001285/stats {"mac":"00800000a0001285","time":"2018-12-14T16:06:46Z","rxPacketsReceived":1,"rxPacketsReceivedOK":1,"txPacketsReceived":0,"txPacketsEmitted":0,"customData":{"ip":"138.22.165.40"}}
-       gateway/00800000a0001285/stats {"mac":"00800000a0001285","time":"2018-12-14T16:07:16Z","rxPacketsReceived":1,"rxPacketsReceivedOK":0,"txPacketsReceived":0,"txPacketsEmitted":0,"customData":{"ip":"138.22.165.40"}}
-       gateway/00800000a0001285/stats {"mac":"00800000a0001285","time":"2018-12-14T16:07:46Z","rxPacketsReceived":0,"rxPacketsReceivedOK":0,"txPacketsReceived":0,"txPacketsEmitted":0,"customData":{"ip":"138.22.165.40"}}
-       gateway/00800000a0001285/stats {"mac":"00800000a0001285","time":"2018-12-14T16:08:16Z","rxPacketsReceived":0,"rxPacketsReceivedOK":0,"txPacketsReceived":0,"txPacketsEmitted":0,"customData":{"ip":"138.22.165.40"}}
-       gateway/00800000a0001285/stats {"mac":"00800000a0001285","time":"2018-12-14T16:08:46Z","rxPacketsReceived":0,"rxPacketsReceivedOK":0,"txPacketsReceived":0,"txPacketsEmitted":0,"customData":{"ip":"138.22.165.40"}}
-       gateway/00800000a0001285/stats {"mac":"00800000a0001285","time":"2018-12-14T16:09:16Z","rxPacketsReceived":0,"rxPacketsReceivedOK":0,"txPacketsReceived":0,"txPacketsEmitted":0,"customData":{"ip":"138.22.165.40"}}
-       gateway/00800000a0001285/stats {"mac":"00800000a0001285","time":"2018-12-14T16:09:46Z","rxPacketsReceived":0,"rxPacketsReceivedOK":0,"txPacketsReceived":0,"txPacketsEmitted":0,"customData":{"ip":"138.22.165.40"}}
-       gateway/00800000a0001285/stats {"mac":"00800000a0001285","time":"2018-12-14T16:10:16Z","rxPacketsReceived":0,"rxPacketsReceivedOK":0,"txPacketsReceived":0,"txPacketsEmitted":0,"customData":{"ip":"138.22.165.40"}}
-       gateway/00800000a0001285/stats {"mac":"00800000a0001285","time":"2018-12-14T16:10:46Z","rxPacketsReceived":0,"rxPacketsReceivedOK":0,"txPacketsReceived":0,"txPacketsEmitted":0,"customData":{"ip":"138.22.165.40"}}
-       gateway/00800000a0001285/stats {"mac":"00800000a0001285","time":"2018-12-14T16:11:16Z","rxPacketsReceived":2,"rxPacketsReceivedOK":0,"txPacketsReceived":0,"txPacketsEmitted":0,"customData":{"ip":"138.22.165.40"}}
-       gateway/00800000a0001285/stats {"mac":"00800000a0001285","time":"2018-12-14T16:11:46Z","rxPacketsReceived":2,"rxPacketsReceivedOK":0,"txPacketsReceived":0,"txPacketsEmitted":0,"customData":{"ip":"138.22.165.40"}}
-       gateway/00800000a0001285/stats {"mac":"00800000a0001285","time":"2018-12-14T16:12:16Z","rxPacketsReceived":0,"rxPacketsReceivedOK":0,"txPacketsReceived":0,"txPacketsEmitted":0,"customData":{"ip":"138.22.165.40"}}
-       gateway/00800000a0001285/stats {"mac":"00800000a0001285","time":"2018-12-14T16:12:46Z","rxPacketsReceived":0,"rxPacketsReceivedOK":0,"txPacketsReceived":0,"txPacketsEmitted":0,"customData":{"ip":"138.22.165.40"}}
-       gateway/00800000a0001285/stats {"mac":"00800000a0001285","time":"2018-12-14T16:13:16Z","rxPacketsReceived":1,"rxPacketsReceivedOK":1,"txPacketsReceived":0,"txPacketsEmitted":0,"customData":{"ip":"138.22.165.40"}}
-       gateway/00800000a0001285/stats {"mac":"00800000a0001285","time":"2018-12-14T16:13:46Z","rxPacketsReceived":2,"rxPacketsReceivedOK":2,"txPacketsReceived":0,"txPacketsEmitted":0,"customData":{"ip":"138.22.165.40"}}
-       gateway/00800000a0001285/stats {"mac":"00800000a0001285","time":"2018-12-14T16:14:16Z","rxPacketsReceived":0,"rxPacketsReceivedOK":0,"txPacketsReceived":0,"txPacketsEmitted":0,"customData":{"ip":"138.22.165.40"}}
-       gateway/00800000a0001285/stats {"mac":"00800000a0001285","time":"2018-12-14T16:14:46Z","rxPacketsReceived":1,"rxPacketsReceivedOK":0,"txPacketsReceived":0,"txPacketsEmitted":0,"customData":{"ip":"138.22.165.40"}}
-       gateway/00800000a0001285/stats {"mac":"00800000a0001285","time":"2018-12-14T16:15:16Z","rxPacketsReceived":0,"rxPacketsReceivedOK":0,"txPacketsReceived":0,"txPacketsEmitted":0,"customData":{"ip":"138.22.165.40"}}
-       gateway/00800000a0001285/stats {"mac":"00800000a0001285","time":"2018-12-14T16:15:46Z","rxPacketsReceived":0,"rxPacketsReceivedOK":0,"txPacketsReceived":0,"txPacketsEmitted":0,"customData":{"ip":"138.22.165.40"}}
-       gateway/00800000a0001285/stats {"mac":"00800000a0001285","time":"2018-12-14T16:16:16Z","rxPacketsReceived":0,"rxPacketsReceivedOK":0,"txPacketsReceived":0,"txPacketsEmitted":0,"customData":{"ip":"138.22.165.40"}}
-       gateway/00800000a0001285/stats {"mac":"00800000a0001285","time":"2018-12-14T16:16:46Z","rxPacketsReceived":0,"rxPacketsReceivedOK":0,"txPacketsReceived":0,"txPacketsEmitted":0,"customData":{"ip":"138.22.165.40"}}
-       gateway/00800000a0001285/stats {"mac":"00800000a0001285","time":"2018-12-14T16:17:16Z","rxPacketsReceived":1,"rxPacketsReceivedOK":1,"txPacketsReceived":0,"txPacketsEmitted":0,"customData":{"ip":"138.22.165.40"}jj}
-       gateway/00800000a0001285/stats {"mac":"00800000a0001285","time":"2018-12-14T16:17:46Z","rxPacketsReceived":0,"rxPacketsReceivedOK":0,"txPacketsReceived":0,"txPacketsEmitted":0,"customData":{"ip":"138.22.165.40"}}
 
     """
     
@@ -102,7 +80,9 @@ class lorawanserver_status(object):
             header = {}
             header['mac'] = loradict.get('mac')
             header['ip']  = customdatadict.get('ip')
+            # TODO header['DataPier'] = loradict.get('name','')
             header['DataPier'] = loradict.get('mac')
+            header['StationName'] = rxdict.get('name','undefined')
             # sensorid = header['SensorName'][:5].replace('-','') + '_' + header['SensorSerialNum'] + '_0001'
             # header['SensorID'] = sensorid
             # JF rm sensorid = "Gateway_" + mac + "_" + self.topicidentifier['endswith'] + '_0001'

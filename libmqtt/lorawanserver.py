@@ -19,6 +19,11 @@ def datetime2array(t):
 ##
 class lorawanserver(object):
     """
+    2018-12-21 JF add Adeunis SensorA, SensorB mA Values as in payload of device
+                              and payload base64 coded as datacode
+                              echo "QmASDjI4IhN2nw=="| base64 --decode |hexdump -C
+                            TODO: confusion at sensors which is tl and which is rf -- tests are running
+
 v00.01.01
 application/3/node/0018b22000000357/rx {"applicationID":"3","applicationName":"Temperature-and-Humidity","deviceName":"TITEC-MS-01","devEUI":"0018b22000000357","rxInfo":[{"gatewayID":"00800000a0002b21","name":"MTCDT_AEPGW-03","rssi":-42,"loRaSNR":7.8,"location":{"latitude":48.248422399999995,"longitude":16.3520512,"altitude":0}}],"txInfo":{"frequency":868500000,"dr":5},"adr":true,"fCnt":1632,"fPort":1,"data":"QmASDjI4IhN2nw==","object":{"humitidy":54.721937499999996,"temperature":3.1474999999999937}}
 
@@ -38,7 +43,10 @@ v00.00.01
     loraz/mobile/adeunis
 
 
-    """
+
+v00.01.01
+application/3/node/0018b22000000357/rx {"applicationID":"3","applicationName":"Temperature-and-Humidity","deviceName":"TITEC-MS-01","devEUI":"0018b22000000357","rxInfo":[{"gatewayID":"00800000a0002b21","name":"MTCDT_AEPGW-03","rssi":-42,"loRaSNR":7.8,"location":{"latitude":48.248422399999995,"longitude":16.3520512,"altitude":0}}],"txInfo":{"frequency":868500000,"dr":5},"adr":true,"fCnt":1632,"fPort":1,"data":"QmASDjI4IhN2nw==","object":{"humitidy":54.721937499999996,"temperature":3.1474999999999937}}
+            """
 
     def __init__(self):
         """
@@ -47,7 +55,7 @@ v00.00.01
         #self.payload = payload
         #self.topic = topic
         self.topicidentifier = {'startswith':'application','endswith':'rx'}
-        self.datakeytranslator = {'tl':['t1','degC'], 'rf':['var1','per'], 'corr':['var5','none']}
+        self.datakeytranslator = {'sensorA':['sensorA','mA'], 'tl':['t1','degC'], 'sensorB':['sensorB','mA'], 'rf':['var1','per'], 'corr':['var5','none']}
         self.identifier = {}
         self.headdict = {}
         self.headstream = {}
@@ -66,13 +74,14 @@ v00.00.01
                 v = ((b1 << 8) + b2 << 8) + b3
                 val = (v/100000. *6.25) - off
                 return val
+    def b2vAB(self,b1,b2,b3,off):
+                v = ((b1 << 8) + b2 << 8) + b3
+                # val = (v/100000. *6.25) - off
+                val = (v *10)
+                return val
 
     def loradict2datastruct(self, loradict):
-	    ''' 
-v00.01.01
-application/3/node/0018b22000000357/rx {"applicationID":"3","applicationName":"Temperature-and-Humidity","deviceName":"TITEC-MS-01","devEUI":"0018b22000000357","rxInfo":[{"gatewayID":"00800000a0002b21","name":"MTCDT_AEPGW-03","rssi":-42,"loRaSNR":7.8,"location":{"latitude":48.248422399999995,"longitude":16.3520512,"altitude":0}}],"txInfo":{"frequency":868500000,"dr":5},"adr":true,"fCnt":1632,"fPort":1,"data":"QmASDjI4IhN2nw==","object":{"humitidy":54.721937499999996,"temperature":3.1474999999999937}}
-            '''
-            datakeytranslator = {'tl':['t1','degC'], 'rf':['var1','per'], 'corr':['var5','none'], 'bat':['var4','per']}
+            datakeytranslator = {'datacode':['datacode','base64'], 'sensorA':['sensorA','mA'], 'tl':['t1','degC'], 'sensorB':['sensorB','mA'], 'rf':['var1','per'], 'corr':['var5','none'], 'bat':['var4','per']}
             rxdict = loradict.get('rxInfo')[0]
             locdict = rxdict.get('location')
             header = {}
@@ -81,7 +90,7 @@ application/3/node/0018b22000000357/rx {"applicationID":"3","applicationName":"T
             header['SensorDescription'] = loradict.get('applicationName','not specified')
             header['SensorSerialNum'] = loradict.get('devEUI','')
             header['SensorGroup'] = loradict.get('deviceName','LORA')
-            sensorid = header['SensorName'][:11].replace('-','') + '_' + header['SensorSerialNum'] + '_0001'
+            sensorid = header['SensorName'][:30].replace('-','') + '_' + header['SensorSerialNum'] + '_0001'
             header['SensorID'] = sensorid
             header['StationID'] = rxdict.get('gatewayID','undefined')
             header['StationName'] = rxdict.get('name','undefined')
@@ -101,6 +110,7 @@ application/3/node/0018b22000000357/rx {"applicationID":"3","applicationName":"T
 
             datacode = loradict.get('data')
             # convert to something like datadict = {"tl":21.75,"rf":36.9}
+            # convert to something like datadict = {"tl":21.75,"rf":36.9}
             barray = bytearray(base64.b64decode(datacode))
 
             print ("Device:", loradict.get('deviceName'))
@@ -108,8 +118,10 @@ application/3/node/0018b22000000357/rx {"applicationID":"3","applicationName":"T
 
             if len(barray) == 10:
                 temp = self.b2v(barray[3],barray[4],barray[5],55)
+                sensorA = self.b2vAB(barray[3],barray[4],barray[5],55)
                 rf = self.b2v(barray[7],barray[8],barray[9],25)
-                datadict = {"tl":temp, "rf":rf}
+                sensorB = self.b2vAB(barray[7],barray[8],barray[9],25)
+                datadict = {"datacode":"datacode", "sensorA":sensorA, "tl":temp, "sensorB":sensorB, "rf":rf}
             elif len(barray) == 7:
                 print ("Found Bytearray 7 with code", datacode)
                 temp = self.b2v7(barray[1],barray[2],100)
@@ -141,8 +153,18 @@ application/3/node/0018b22000000357/rx {"applicationID":"3","applicationName":"T
                     unitlist.append(unit)
                     multilist.append(1000)
                     packstr += "l"
-                    datalst.append(int(datadict[elem]*1000))   
-                #print (elem, datadict[elem])
+                    if not elem == 'IP':
+                        multilist.append(1000)
+                        if type(datadict[elem]) == int:
+                            datalst.append(int(datadict[elem]*1000))   
+                        else:
+                            datalst.append(str(datadict[elem]))
+                    else:
+                        multilist.append(1)
+                        datalst.append(int(datadict[elem]))   
+                    # if is int datadict[elem]
+                    # datalst.append(int(datadict[elem]*1000))   
+                # print (elem, datadict[elem])
 
             datalst = [str(elem) for elem in datalst]
             dataline =','.join(datalst)
