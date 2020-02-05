@@ -100,7 +100,6 @@ class ObsdaqProtocol(LineReceiver):
         log.msg('  -> {} lost.'.format(self.sensor))
 
     def processData(self, data):
-### from obsdaq.py
         currenttime = datetime.utcnow()
         outdate = datetime.strftime(currenttime, "%Y-%m-%d")
         filename = outdate
@@ -113,7 +112,7 @@ class ObsdaqProtocol(LineReceiver):
         header = "# MagPyBin %s %s %s %s %s %s %d" % (self.sensor, '[x,y,z]', '[X,Y,Z]', '[nT,nT,nT]', '[1000,1000,1000]', packcode, struct.calcsize(packcode))
 
         packcodeSup = '6hL....'
-        header = "LemiBin %s %s %s %s %s %s %d\n" % (self.sensor, '[var1,t2,var3,var4,var5]', '[Vcc,Telec,sup1,sup2,sup3]', '[V,degC,V,V,V]', '[TODO 0.001,0.001,0.001,100,100]', packcode, struct.calcsize(packcode))
+        headerSup = "# MagPyBin %s %s %s %s %s %s %d" % (self.sensor, '[var1,t2,var3,var4,var5]', '[Vcc,Telec,sup1,sup2,sup3]', '[V,degC,V,V,V]', '[1000,1000,1000,1000,1000]', packcode, struct.calcsize(packcode))
 
 
 
@@ -167,27 +166,20 @@ class ObsdaqProtocol(LineReceiver):
                     print (str(q)+'\t',end='')
                     print (str(r)+'\t')
 
-### end obsdaq.py
-        try:
-            if len(data) == 2:
-                typ = "valid"
-            # add other types here
-        except:
-            # TODO??? base x mobile?
-            log.err('BM35 - Protocol: Output format not supported - use either base, ... or mobile')
+        # TODO check data
+        typ = "valid"
+        # log.err('BM35 - Protocol: Output format not supported - use either base, ... or mobile')
  
-        if typ == "valid": 
-            pressure_raw = float(data[0].strip())
-            pressure = float(data[1].strip())
-        elif typ == "none":
+        if not typ == "valid": 
             dontsavedata = True
-            pass
 
         if not typ == "none":
-            # extract time data
-            datearray = datetime2array(currenttime)
+            datearray = datetime2array(timestamp)
             try:
-                datearray.append(int(pressure*1000.))
+                # x, y and z have [pT]
+                datearray.append(int(round(x))
+                datearray.append(int(round(y))
+                datearray.append(int(round(z))
                 data_bin = struct.pack('<'+packcode,*datearray)
             except:
                 log.msg('{} protocol: Error while packing binary data'.format(self.sensordict.get('protocol')))
