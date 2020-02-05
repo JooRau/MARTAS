@@ -1,0 +1,241 @@
+"""
+Protocol for the combination FGE, PalmAcq and ObsDAQ
+Temporary settings here in the code
+constants for fluxgate sensor SE.S013 and electronic box SE.E0379
+"""
+# ObsDAQ gain set to +/-10V
+GAINMAX = 10
+# scale factors for given instruments (pT/V)
+SCALE_X = 312300
+SCALE_Y = 310300
+SCALE_Z = 318500
+
+from __future__ import print_function
+from __future__ import absolute_import
+
+# ###################################################################
+# Import packages
+# ###################################################################
+
+import re     # for interpretation of lines
+import struct # for binary representation
+import socket # for hostname identification
+import string # for ascii selection
+from datetime import datetime, timedelta
+from twisted.protocols.basic import LineReceiver
+from twisted.python import log
+from magpy.acquisition import acquisitionsupport as acs
+import serial # for initializing command
+import os
+
+def datetime2array(t):
+    return [t.year,t.month,t.day,t.hour,t.minute,t.second,t.microsecond]
+
+
+## Mingeo ObsDAQ protocol
+##
+class ObsdaqProtocol(LineReceiver):
+    """
+    The Obsdaq protocol gets data assuming:
+        connected to a PalmAcq
+        PalmAcq is in Transparent mode (see manual)
+
+    SETUP:
+        1.) use palmacq.py to make settings of PalmAcq 
+        2.) use obsdaq.py to make settings of ObsDAQ
+    """
+    def __init__(self, client, sensordict, confdict):
+        """
+        'client' could be used to switch between different publishing protocols
+                 (e.g. MQTT or WS-MCU gateway factory) to publish events
+        'sensordict' contains a dictionary with all sensor relevant data (sensors.cfg)
+        'confdict' contains a dictionary with general configuration parameters (martas.cfg)
+        """
+        self.client = client
+        self.sensordict = sensordict    
+        self.confdict = confdict
+        self.count = 0  ## counter for sending header information
+        self.sensor = sensordict.get('sensorid')
+        self.hostname = socket.gethostname()
+        self.printable = set(string.printable)
+        #log.msg("  -> Sensor: {}".format(self.sensor))
+        self.datalst = []
+        self.datacnt = 0
+        self.metacnt = 10
+        self.errorcnt = {'time':0}
+
+        self.delaylist = []  # delaylist contains up to 1000 diffs between gps and ntp
+                             # the median of this values is used for ntp timedelay
+        self.timedelay = 0.0
+        self.timethreshold = 3 # secs - waring if timedifference is larger the 3 seconds
+
+        # Serial configuration
+        self.baudrate=int(sensordict.get('baudrate'))
+        self.port = confdict['serialport']+sensordict.get('port')
+        self.parity=sensordict.get('parity')
+        self.bytesize=int(sensordict.get('bytesize'))
+        self.stopbits=int(sensordict.get('stopbits'))
+        self.timeout=2 # should be rate dependend
+
+
+        # QOS
+        self.qos=int(confdict.get('mqttqos',0))
+        if not self.qos in [0,1,2]:
+            self.qos = 0
+        log.msg("  -> setting QOS:", self.qos)
+
+        # Debug mode
+        debugtest = confdict.get('debug')
+        self.debug = False
+        if debugtest == 'True':
+            log.msg('DEBUG - {}: Debug mode activated.'.format(self.sensordict.get('protocol')))
+            self.debug = True    # prints many test messages
+        else:
+            log.msg('  -> Debug mode = {}'.format(debugtest))
+
+    def connectionMade(self):
+        log.msg('  -> {} connected.'.format(self.sensor))
+
+    def connectionLost(self, reason):
+        log.msg('  -> {} lost.'.format(self.sensor))
+
+    def processData(self, data):
+### from obsdaq.py
+        currenttime = datetime.utcnow()
+        outdate = datetime.strftime(currenttime, "%Y-%m-%d")
+        filename = outdate
+        sensorid = self.sensor
+        datearray = []
+        dontsavedata = False
+
+        packcode = '6hLlll'
+        # int!
+        header = "# MagPyBin %s %s %s %s %s %s %d" % (self.sensor, '[x,y,z]', '[X,Y,Z]', '[nT,nT,nT]', '[1000,1000,1000]', packcode, struct.calcsize(packcode))
+
+        packcodeSup = '6hL....'
+        header = "LemiBin %s %s %s %s %s %s %d\n" % (self.sensor, '[var1,t2,var3,var4,var5]', '[Vcc,Telec,sup1,sup2,sup3]', '[V,degC,V,V,V]', '[TODO 0.001,0.001,0.001,100,100]', packcode, struct.calcsize(packcode))
+
+
+
+
+        if data.startswith(':R'):
+            # :R,00,200131.143739.617,*0259FEFFF1BFFFFCEDL:04AC11CC000B000B000B
+            # :R,00,YYMMDD.hhmmss.sss,*xxxxxxyyyyyyzzzzzzt:vvvvttttppppqqqqrrrr
+            d = data.split(',')
+            Y = int('20'+d[2][0:2])
+            M = int(d[2][2:4])
+            D = int(d[2][4:6])
+            h = int(d[2][7:9])
+            m = int(d[2][9:11])
+            s = int(d[2][11:13])
+            us = int(d[2][14:17]) * 1000
+            timestamp = datetime(Y,M,D,h,m,s,us)
+            if d[3][0] == '*':
+                x = (int('0x'+d[3][1:7],16) ^ 0x800000) - 0x800000
+                x = float(x) * 2**-23 * GAINMAX * SCALE_X
+                y = (int('0x'+d[3][7:13],16) ^ 0x800000) - 0x800000
+                y = float(y) * 2**-23 * GAINMAX * SCALE_Y
+                z = (int('0x'+d[3][13:19],16) ^ 0x800000) - 0x800000
+                z = float(z) * 2**-23 * GAINMAX * SCALE_Z
+                triggerflag = d[3][19]
+            else:
+                # TODO ask Roman
+                pass
+            sup = d[3].split(':')
+            if len(sup) == 2:
+                voltage = int(sup[1][0:4],16) ^ 0x8000 - 0x8000
+                voltage = float(voltage) * 2.6622e-3 + 9.15
+                temp = int(sup[1][4:8],16) ^ 0x8000 - 0x8000
+                temp = float(temp) / 128.
+                p = (int('0x'+sup[1][8:12],16) ^ 0x8000) - 0x8000
+                p = float(p) / 8000.0
+                q = (int('0x'+sup[1][8:12],16) ^ 0x8000) - 0x8000
+                q = float(q) / 8000.0
+                r = (int('0x'+sup[1][8:12],16) ^ 0x8000) - 0x8000
+                r = float(r) / 8000.0
+            if debug:
+                print (str(timestamp)+'\t',end='')
+                print (str(x)+'\t',end='')
+                print (str(y)+'\t',end='')
+                print (str(z)+'\t',end='')
+                print (str(triggerflag))
+                if len(sup) == 2:
+                    print ('supplementary:\t',end='')
+                    print (str(voltage)+' V\t',end='')
+                    print (str(temp)+' degC\t',end='')
+                    print (str(p)+'\t',end='')
+                    print (str(q)+'\t',end='')
+                    print (str(r)+'\t')
+
+### end obsdaq.py
+        try:
+            if len(data) == 2:
+                typ = "valid"
+            # add other types here
+        except:
+            # TODO??? base x mobile?
+            log.err('BM35 - Protocol: Output format not supported - use either base, ... or mobile')
+ 
+        if typ == "valid": 
+            pressure_raw = float(data[0].strip())
+            pressure = float(data[1].strip())
+        elif typ == "none":
+            dontsavedata = True
+            pass
+
+        if not typ == "none":
+            # extract time data
+            datearray = datetime2array(currenttime)
+            try:
+                datearray.append(int(pressure*1000.))
+                data_bin = struct.pack('<'+packcode,*datearray)
+            except:
+                log.msg('{} protocol: Error while packing binary data'.format(self.sensordict.get('protocol')))
+
+            if not self.confdict.get('bufferdirectory','') == '':
+                acs.dataToFile(self.confdict.get('bufferdirectory'), sensorid, filename, data_bin, header)
+            returndata = ','.join(list(map(str,datearray)))
+        else:
+            returndata = ''
+
+        return returndata, header
+
+         
+    def lineReceived(self, line):
+        topic = self.confdict.get('station') + '/' + self.sensordict.get('sensorid')
+        # extract only ascii characters 
+        line = ''.join(filter(lambda x: x in string.printable, line))
+
+        ok = True
+        try:
+            data, head = self.processData(data)
+        except:
+            print('{}: Data seems not to be PalmAcq data: Looks like {}'.format(self.sensordict.get('protocol'),line))
+            ok = False
+
+        if ok:
+            senddata = False
+            coll = int(self.sensordict.get('stack'))
+            if coll > 1:
+                self.metacnt = 1 # send meta data with every block
+                if self.datacnt < coll:
+                    self.datalst.append(data)
+                    self.datacnt += 1
+                else:
+                    senddata = True
+                    data = ';'.join(self.datalst)
+                    self.datalst = []
+                    self.datacnt = 0
+            else:
+                senddata = True
+
+            if senddata:
+                self.client.publish(topic+"/data", data, qos=self.qos)
+                if self.count == 0:
+                    add = "SensorID:{},StationID:{},DataPier:{},SensorModule:{},SensorGroup:{},SensorDecription:{},DataTimeProtocol:{}".format( self.sensordict.get('sensorid',''),self.confdict.get('station',''),self.sensordict.get('pierid',''),self.sensordict.get('protocol',''),self.sensordict.get('sensorgroup',''),self.sensordict.get('sensordesc',''),self.sensordict.get('ptime','') )
+                    self.client.publish(topic+"/dict", add, qos=self.qos)
+                    self.client.publish(topic+"/meta", head, qos=self.qos)
+                self.count += 1
+                if self.count >= self.metacnt:
+                    self.count = 0
+
