@@ -1,17 +1,18 @@
+from __future__ import print_function
+from __future__ import absolute_import
+
 """
 Protocol for the combination FGE, PalmAcq and ObsDAQ
 Temporary settings here in the code
 constants for fluxgate sensor SE.S013 and electronic box SE.E0379
 """
+
 # ObsDAQ gain set to +/-10V
 GAINMAX = 10
 # scale factors for given instruments (pT/V)
 SCALE_X = 312300
 SCALE_Y = 310300
 SCALE_Z = 318500
-
-from __future__ import print_function
-from __future__ import absolute_import
 
 # ###################################################################
 # Import packages
@@ -34,7 +35,7 @@ def datetime2array(t):
 
 ## Mingeo ObsDAQ protocol
 ##
-class ObsdaqProtocol(LineReceiver):
+class obsdaqProtocol(LineReceiver):
     """
     The Obsdaq protocol gets data assuming:
         connected to a PalmAcq
@@ -75,6 +76,7 @@ class ObsdaqProtocol(LineReceiver):
         self.parity=sensordict.get('parity')
         self.bytesize=int(sensordict.get('bytesize'))
         self.stopbits=int(sensordict.get('stopbits'))
+        self.delimiter='\r'
         self.timeout=2 # should be rate dependend
 
 
@@ -98,6 +100,7 @@ class ObsdaqProtocol(LineReceiver):
 
     def connectionLost(self, reason):
         log.msg('  -> {} lost.'.format(self.sensor))
+        log.msg(reason)
 
     def processData(self, data):
         currenttime = datetime.utcnow()
@@ -113,9 +116,6 @@ class ObsdaqProtocol(LineReceiver):
 
         packcodeSup = '6hL....'
         headerSup = "# MagPyBin %s %s %s %s %s %s %d" % (self.sensor, '[var1,t2,var3,var4,var5]', '[Vcc,Telec,sup1,sup2,sup3]', '[V,degC,V,V,V]', '[1000,1000,1000,1000,1000]', packcode, struct.calcsize(packcode))
-
-
-
 
         if data.startswith(':R'):
             # :R,00,200131.143739.617,*0259FEFFF1BFFFFCEDL:04AC11CC000B000B000B
@@ -152,19 +152,19 @@ class ObsdaqProtocol(LineReceiver):
                 q = float(q) / 8000.0
                 r = (int('0x'+sup[1][8:12],16) ^ 0x8000) - 0x8000
                 r = float(r) / 8000.0
-            if debug:
-                print (str(timestamp)+'\t',end='')
-                print (str(x)+'\t',end='')
-                print (str(y)+'\t',end='')
-                print (str(z)+'\t',end='')
-                print (str(triggerflag))
+            if self.debug:
+                log.msg(str(timestamp)+'\t',end='')
+                log.msg(str(x)+'\t',end='')
+                log.msg(str(y)+'\t',end='')
+                log.msg(str(z)+'\t',end='')
+                log.msg(str(triggerflag))
                 if len(sup) == 2:
-                    print ('supplementary:\t',end='')
-                    print (str(voltage)+' V\t',end='')
-                    print (str(temp)+' degC\t',end='')
-                    print (str(p)+'\t',end='')
-                    print (str(q)+'\t',end='')
-                    print (str(r)+'\t')
+                    log.msg('supplementary:\t',end='')
+                    log.msg(str(voltage)+' V\t',end='')
+                    log.msg(str(temp)+' degC\t',end='')
+                    log.msg(str(p)+'\t',end='')
+                    log.msg(str(q)+'\t',end='')
+                    log.msg(str(r)+'\t')
 
         # TODO check data
         typ = "valid"
@@ -177,9 +177,9 @@ class ObsdaqProtocol(LineReceiver):
             datearray = datetime2array(timestamp)
             try:
                 # x, y and z have [pT]
-                datearray.append(int(round(x))
-                datearray.append(int(round(y))
-                datearray.append(int(round(z))
+                datearray.append(int(round(x)))
+                datearray.append(int(round(y)))
+                datearray.append(int(round(z)))
                 data_bin = struct.pack('<'+packcode,*datearray)
             except:
                 log.msg('{} protocol: Error while packing binary data'.format(self.sensordict.get('protocol')))
@@ -197,10 +197,9 @@ class ObsdaqProtocol(LineReceiver):
         topic = self.confdict.get('station') + '/' + self.sensordict.get('sensorid')
         # extract only ascii characters 
         line = ''.join(filter(lambda x: x in string.printable, line))
-
         ok = True
         try:
-            data, head = self.processData(data)
+            data, head = self.processData(line)
         except:
             print('{}: Data seems not to be PalmAcq data: Looks like {}'.format(self.sensordict.get('protocol'),line))
             ok = False
