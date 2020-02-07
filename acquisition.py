@@ -406,9 +406,9 @@ def main(argv):
             import subprocess
             try:
                 log.msg("  - running initialization {}".format(initapp))
-                initcall = "{} {}".format(sys.executable, initapp)
-                #log.msg(subprocess.check_output(['/bin/sh',initapp]))
-                log.msg(subprocess.check_output(initcall))
+                #initcall = "{} {}".format(sys.executable, initapp)
+                #log.msg(subprocess.check_output(initcall))
+                log.msg(subprocess.check_output(['/bin/sh',initapp]))
             except subprocess.CalledProcessError as e:
                 log.msg("  - init command '{}' returned with error (code {}): {}".format(e.cmd, e.returncode, e.output))
             except:

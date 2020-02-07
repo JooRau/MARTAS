@@ -44,6 +44,7 @@ CC = '02'
     #   53 .. 38.4 Hz
     #   63 .. 64 Hz
 DD = '23'
+#DD = '63'
 
 # program offset calibration constants
     # command $AAnWOaaaaaa
@@ -285,6 +286,7 @@ def main(argv):
                     # check calibration finished?
                     calfin = False
                     while not calfin:
+                        time.sleep(0.5)
                         ans = command('$01'+str(i)+'RR')
                         ans = ans.split('R')[1]
                         if ans == '0':
