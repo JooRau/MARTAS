@@ -10,9 +10,13 @@ constants for fluxgate sensor SE.S013 and electronic box SE.E0379
 # ObsDAQ gain set to +/-10V
 GAINMAX = 10
 # scale factors for given instruments (pT/V)
-SCALE_X = 312300
-SCALE_Y = 310300
-SCALE_Z = 318500
+#SCALE_X = 312300
+#SCALE_Y = 310300
+#SCALE_Z = 318500
+# mV temporary
+SCALE_X = 1000000
+SCALE_Y = 1000000
+SCALE_Z = 1000000
 
 # ###################################################################
 # Import packages

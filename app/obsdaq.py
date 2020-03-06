@@ -48,11 +48,13 @@ DD = '23'
 
 # program offset calibration constants
     # command $AAnWOaaaaaa
-OFFSET = ['','','']
+#OFFSET = ['','','']
+OFFSET = ['FFF19A','FFF41B','FFF70C']
 
 # program full-scale calibration constants
     # command $AAnWFffffff
-FULLSCALE = ['','','']
+#FULLSCALE = ['','','']
+FULLSCALE = ['3231C0','32374B','323A7E']
 
 # setting internal trigger timing
     # command $AAPPeeeeffff
@@ -127,7 +129,7 @@ def command(call):
 
 def main(argv):
     try:
-        opts, args = getopt.getopt(argv,"hvcapsodi",[])
+        opts, args = getopt.getopt(argv,"hvcn:f:apsodi",[])
     except getopt.GetoptError:
         print ('unknown option')
         sys.exit(2)
@@ -142,12 +144,15 @@ def main(argv):
             print ('  python palmacq.py -t')
             print ('-------------------------------------')
             print ('Usage:')
-            print ('obsdaq.py -v -c -a -p -s -o -d -i')
+            print ('obsdaq.py -v -c -n channel -f channel -a -p -s -o -d -i')
             print ('-------------------------------------')
             print ('Options:')
             print ('-v          : show version of ObsDAQ and quit')
             print ('')
             print ('-c          : define calibration constants')
+            print ('-n channel  : perform an offset system calibration (input must be 0) of channel 1-3')
+            print ('-f channel  : perform a full-scale calibration (input must be maximum) of channel 1-3')
+            print ('')
             print ('-a          : start acquisition (calibrate first!)')
             print ("-p          : exit free run or triggered mode - stop acquisition")
             print ('-s          : show output from serial line')
@@ -311,6 +316,74 @@ def main(argv):
             command('$010RF')
             command('$011RF')
             command('$012RF')
+
+        elif opt in ("-n", "--offsetcal"):
+            try:
+                ch = int(arg)-1
+                ch = str(ch)
+            except:
+                print ("channel must be in 1..3")
+                exit(2)
+            answer = ser.read(10)
+            if answer:
+                print ('it seems, that acquisition is in progress.')
+                print ('please stop acquisition using -p or --stop option first!')
+                exit(2)
+            
+            print ('turning off triggering')
+            command('#01PP00000000')
+            # wait a second
+            time.sleep(1)
+
+            print ('setting 24-bit channel configuration')
+            # cc=02..+/-10V
+            # dd=23..12.8Hz
+            command('$010WS0201'+CC+DD)
+            time.sleep(1)
+            command('$011WS0201'+CC+DD)
+            time.sleep(1)
+            command('$012WS0201'+CC+DD)
+            time.sleep(1)
+
+            print ('performing offset calibration of channel '+arg)
+            command('$01'+ch+'WCF3')
+            time.sleep(1)
+            print ('get the constants from python obsdac.py -i')
+
+        elif opt in ("-f", "--fullscalecal"):
+            try:
+                ch = int(arg)-1
+                ch = str(ch)
+            except:
+                print ("channel must be in 1..3")
+                exit(2)
+            answer = ser.read(10)
+            if answer:
+                print ('it seems, that acquisition is in progress.')
+                print ('please stop acquisition using -p or --stop option first!')
+                exit(2)
+            
+            print ('turning off triggering')
+            command('#01PP00000000')
+            # wait a second
+            time.sleep(1)
+
+            print ('setting 24-bit channel configuration')
+            # cc=02..+/-10V
+            # dd=23..12.8Hz
+            command('$010WS0201'+CC+DD)
+            time.sleep(1)
+            command('$011WS0201'+CC+DD)
+            time.sleep(1)
+            command('$012WS0201'+CC+DD)
+            time.sleep(1)
+
+            print ('performing full-scale calibration of channel '+arg)
+            command('$01'+ch+'WCF4')
+            time.sleep(1)
+            print ('get the constants from python obsdac.py -i')
+
+
 
         elif opt in ("-d", "--defs"):
             # show user settings human readable

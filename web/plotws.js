@@ -128,6 +128,8 @@
                     // catch not selected signals in non default mode
                     try {
                         signals[signalid].chart.timeSeries.append((data_arr[0]),Number(data_arr[i+1]));
+                        var mydate = new Date(Number(data_arr[0]));
+                        debug.innerHTML = mydate.toString()+'  '+data_arr.slice(1);
                     }
                     catch (e) {}
                     //debug.innerHTML = data_arr[i+1];
