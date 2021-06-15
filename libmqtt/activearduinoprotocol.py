@@ -12,10 +12,12 @@ import string # for ascii selection
 from datetime import datetime, timedelta
 from twisted.protocols.basic import LineReceiver
 from twisted.python import log
-from magpy.acquisition import acquisitionsupport as acs
+from core import acquisitionsupport as acs
 from magpy.stream import KEYLIST
 import serial
 import subprocess
+import sys
+import time
 
 ## Aktive Arduino protocol
 ## -----------------------
@@ -67,17 +69,20 @@ class ActiveArduinoProtocol(object):
         self.datacnt = 0
         self.metacnt = 10
         self.counter = {}
+        self.initserial = True
 
-        # Commands (take them from somewhere --- sensordesc)
+        # Commands (take them sensordesc)
+        # i.e. sensordesc : owT-swD
         commandlist = sensordict.get('sensordesc').strip().replace('\n','').split('-')
         if not 'arduino sensors' in commandlist:
             cdict = {}
             for idx,com in enumerate(commandlist):
                 cdict['data{}'.format(idx)] = com
             self.commands = [cdict]
+            print ("Commands from sensordesc:", self.commands)
         else:
             self.commands = [{'data1':'owT','data2':'swD'}]
-        print ("Commands:", self.commands)
+            print ("Default commands selected")
         self.hexcoding = False
         self.eol = '/r/n'
 
@@ -119,33 +124,39 @@ class ActiveArduinoProtocol(object):
         self.headlist = []
 
 
-
     def send_command(self,ser,command,eol,hex=False):
         response = ''
         fullresponse = ''
         maxcnt = 50
         cnt = 0
         command = command+eol
-        if(ser.isOpen() == False):
-            ser.open()
+        ser.flush()
         sendtime = datetime.utcnow()
-        ser.write(command)
+        if sys.version_info >= (3, 0):
+            ser.write(command.encode('ascii'))
+        else:
+            ser.write(command)
         # skipping all empty lines
         try: ## check for exeception in  raise SerialException
-            while response == '': 
+            while not response or response == '':
                 response = ser.readline()
+                if sys.version_info >= (3, 0):
+                    response = response.decode()
             # read until end-of-messageblock signal is obtained (use some break value)
             while not response.startswith('<MARTASEND>') and not cnt == maxcnt:
                 cnt += 1
                 fullresponse += response
                 response = ser.readline()
+                if sys.version_info >= (3, 0):
+                    response = response.decode()
         except serial.SerialException:
-            log.msg("SerialException found - restarting martas")
+            log.msg("SerialException found - restarting martas ...")
+            time.sleep(1)
             self.restart()
         except:
             log.msg("Other exception found")
             raise
- 
+
         responsetime = datetime.utcnow()
         if cnt == maxcnt:
             fullresponse = 'Maximum count {} was reached'.format(maxcnt)
@@ -252,13 +263,12 @@ class ActiveArduinoProtocol(object):
         except:
             # in case an incomplete header is available
             # will be read next time completely
-            return {} 
+            return {}
 
         return headdict
 
 
     def getSensorInfo(self, line):
-        
         log.msg("  -> Received unverified sensor information")
         if self.debug:
             log.msg("DEBUG -> Sensor information line looks like: {}".format(line))
@@ -289,16 +299,18 @@ class ActiveArduinoProtocol(object):
         """
          DESCRIPTION:
              Will analysze data line and a list of existing IDs.
-             Please note: when initializing, then existing data will be taken from 
-             Arduino Block.  
+             Please note: when initializing, then existing data will be taken from
+             Arduino Block.
              - If ID is existing, this method will return its ID, sensorid, meta info
                as used by process data, and data.
-             - If ID not yet existing: line will be scanned until all meta info is 
-               available. Method will return ID 0 and empty fields. 
+             - If ID not yet existing: line will be scanned until all meta info is
+               available. Method will return ID 0 and empty fields.
              - If meta info is coming: sensorids will be quickly checked against existing.
                If not existing and not yet used - ID will be added to sensors.cfg and existing
                If not existing but used so far - ID in file is wrong -> warning
                If existing and ID check OK: continue
+        TODO: path number might change if a sensor is disconnected
+              problem with sensorID and ID number...
 
         PARAMETER:
             existinglist: [list] [[1,2,...],['BM35_xxx_0001','SH75_xxx_0001',...]]
@@ -326,12 +338,36 @@ class ActiveArduinoProtocol(object):
                     infodict = self.getSensorInfo(line)
                     self.infolist.append(infodict)
                     # add values to metadict
+                # at this stage i have the correct sensorid in infodict
                 if idnum in [idict.get('ID') for idict in self.infolist] and idnum in [hdict.get('ID') for hdict in self.headlist]:
-                    # get critical info: sensorname, idnum and board
+                    # idnums found in line, present in head and meta data
                     sensoridenti = [idict.get('SensorName') for idict in self.infolist if str(idict.get('ID')) == str(idnum)]
+                    # get sensorid as well for the identificationnumner
+                    sensoridininfo = [idict.get('SensorID') for idict in self.infolist if str(idict.get('ID')) == str(idnum)]
                     # board is already selected
                     seldict2 = [edict for edict in self.existinglist if str(edict.get('path')) == str(idnum)]
+                    # if a single sensor id is found:
+                    # it might happen that idnum (path in existinglist) is not referring
+                    # to the correct sensorid. This might happen if e.g. one ow temperature
+                    # sensor is disconnected, when previously two have been attached.
+                    # after restart the remaining sensor will have the lowest id, not
+                    # necessarily matching the originally stored one.
+                    # Therefor we check it and eventually assign a new id/path
+                    if len(sensoridininfo) == 1:
+                        sensid = sensoridininfo[0]
+                        seldict1 = [edict for edict in self.existinglist if edict.get('sensorid').find(sensid) > -1]
+                    else:
+                        seldict1 = seldict2
+                    if not seldict1==seldict2:
+                        # sensorid not matching the sensoid stored with this idnum/path
+                        seldict2 = seldict1
+                        # therefore update pathid in selfexistinglist
+                        self.existinglist = [e for e in self.existinglist if not str(e.get('path')) == str(idnum)]
+                        seldicttmp = seldict1[-1]
+                        seldicttmp['path'] = str(idnum)
+                        self.existinglist.append(seldicttmp)
                     seldict3 = [edict for edict in seldict2 if str(edict.get('name')) == str(sensoridenti[0])]
+                    # Select correct idnum, so that sesnorid's are fitting
                     if not len(seldict3) > 0 and len(sensoridenti) > 0:
                         log.msg("Arduino: Sensor {} not yet existing -> adding to existinglist".format(sensoridenti[0]))
                         relevantdict = [idict for idict in self.infolist if str(idict.get('ID')) == str(idnum)][0]
@@ -351,7 +387,10 @@ class ActiveArduinoProtocol(object):
                         log.msg("Arduino: Writing new sensor input to sensors.cfg ...")
                         success = acs.AddSensor(self.confdict.get('sensorsconf'), values, block='Arduino')
                         #success = acs.AddSensor(self.confdict.get('sensorsconf'), values, block='Arduino')
+                        print ("Add sensor done")
                         self.existinglist.append(values)
+                        print ("sensor added to arduino list")
+
                     elif len(seldict3) > 0:
                         log.msg("Arduino: Sensor {} identified and verified".format(sensoridenti[0]))
                         self.verifiedids.append(idnum)
@@ -377,60 +416,57 @@ class ActiveArduinoProtocol(object):
     def sendRequest(self):
 
         # connect to serial
+        ser = serial.Serial(self.port, baudrate=int(self.baudrate), parity=self.parity, bytesize=int(self.bytesize), stopbits=int(self.stopbits), timeout=self.timeout)
+
+        # Open Connection
         try:
-            ser = serial.Serial(self.port, baudrate=int(self.baudrate), parity=self.parity, bytesize=int(self.bytesize), stopbits=int(self.stopbits), timeout=self.timeout)
-        except:
-            log.msg("Serial connection failed")
+            ser.open()
+        except Exception as e:
+            #if travistestrun:
+            #    print ("ardcomm: serial port not available in testrun - finishing")
+            #   sys.exit(0)
+            #print ("lib activearduino: error open serial port: {}".format(str(e)))
+            # ser is already open dur to serial.Serial command
+            pass
 
-        # send request string()
-        for sensordict in self.commands:
-            for item in sensordict:
-                command = sensordict.get(item)
-                n = command.count(":")
-                miss=-(n-2)
-                for n in range(miss):
-                    command += ':'
-                if self.debug:
-                    log.msg("DEBUG - sending command key {}: {}".format(item,command))
+        if ser.isOpen():
+            # send request string()
+            for sensordict in self.commands:
+                for item in sensordict:
+                    command = sensordict.get(item)
+                    n = command.count(":")
+                    miss=-(n-2)
+                    for n in range(miss):
+                        command += ':'
+                    if self.debug:
+                        log.msg("DEBUG - sending command key {}: {}".format(item,command))
+                    #time.sleep(2) # doesnt help
+                    answer, actime = self.send_command(ser,command,self.eol,hex=self.hexcoding)
+                    if self.debug:
+                        log.msg("DEBUG - received {}".format(answer))
 
-                answer, actime = self.send_command(ser,command,self.eol,hex=self.hexcoding)
-                if self.debug:
-                    log.msg("DEBUG - received {}".format(answer))
-                # disconnect from serial
-                ser.close()
-                # analyze return if data is requested
-                if item.startswith('data'):
-                    # get all lines in answer
-                    lines = answer.split('\n')
-                    for line in lines:
-                        if len(line)>2 and (line[2] == ':' or line[3] == ':'):
-                            self.analyzeline(line)
+                    # analyze return if data is requested
+                    if item.startswith('data') and not answer.find('-') > -1 and not answer.find('Starting') > -1:
+                        # get all lines in answer
+                        lines = answer.split('\n')
+                        for line in lines:
+                            if len(line)>2 and (line[2] == ':' or line[3] == ':'):
+                                self.analyzeline(line)
 
-                """
-                if not success and self.errorcnt < 5:
-                    self.errorcnt = self.errorcnt + 1
-                    log.msg('SerialCall: Could not interpret response of system when sending %s' % item) 
-                elif not success and self.errorcnt == 5:
-                    try:
-                        check_call(['/etc/init.d/martas', 'restart'])
-                    except subprocess.CalledProcessError:
-                        log.msg('SerialCall: check_call didnt work')
-                        pass # handle errors in the called executable
-                    except:
-                        log.msg('SerialCall: check call problem')
-                        pass # executable not found
-                    #os.system("/etc/init.d/martas restart")
-                    log.msg('SerialCall: Restarted martas process')
-                """
-
+            # disconnect from serial
+            ser.close()
+            if ser.isOpen():
+                print ("but seems to be still open")
+        else:
+            print ("lib activearduino: Could not open serial port")
 
     def analyzeline(self, line):
 
-        #if self.debug:
-        #    log.msg("Received line: {}".format(line))
+        if self.debug:
+            log.msg("Received line: {}".format(line))
 
-        # extract only ascii characters 
-        line = ''.join(filter(lambda x: x in string.printable, line))
+        # extract only ascii characters
+        line = ''.join(filter(lambda x: x in string.printable, str(line)))
 
         # Create a list of sensors like for OW
         # dispatch with the appropriate sensor
@@ -469,8 +505,8 @@ class ActiveArduinoProtocol(object):
                 cnt = self.counter.get(sensorid)
 
                 if cnt == 0:
-                    ## 'Add' is a string containing dict info like: 
-                    ## SensorID:ENV05_2_0001,StationID:wic, PierID:xxx,SensorGroup:environment,... 
+                    ## 'Add' is a string containing dict info like:
+                    ## SensorID:ENV05_2_0001,StationID:wic, PierID:xxx,SensorGroup:environment,...
                     add = "SensorID:{},StationID:{},DataPier:{},SensorModule:{},SensorGroup:{},SensorDescription:{},DataTimeProtocol:{}".format( evdict.get('sensorid',''),self.confdict.get('station','').strip(),evdict.get('pierid','').strip(),evdict.get('protocol','').strip(),evdict.get('sensorgroup','').strip(),evdict.get('sensordesc','').strip(),evdict.get('ptime','').strip() )
                     self.client.publish(topic+"/dict", add, qos=self.qos)
                     self.client.publish(topic+"/meta", head, qos=self.qos)
@@ -480,6 +516,5 @@ class ActiveArduinoProtocol(object):
                 if cnt >= self.metacnt:
                     cnt = 0
 
-                # update counter in dict 
+                # update counter in dict
                 self.counter[sensorid] = cnt
-

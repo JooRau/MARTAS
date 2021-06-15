@@ -12,7 +12,7 @@ import string # for ascii selection
 from datetime import datetime, timedelta
 from twisted.protocols.basic import LineReceiver
 from twisted.python import log
-from magpy.acquisition import acquisitionsupport as acs
+from core import acquisitionsupport as acs
 from magpy.stream import KEYLIST
 
 
@@ -192,7 +192,6 @@ class ArduinoProtocol(LineReceiver):
 
 
     def getSensorInfo(self, line):
-        
         log.msg("  -> Received unverified sensor information")
         if self.debug:
             log.msg("DEBUG -> Sensor information line looks like: {}".format(line))
@@ -304,7 +303,7 @@ class ArduinoProtocol(LineReceiver):
             # invalid return value found
             if self.debug:
                 log.msg("DEBUG - Invalid return value found: {}".format(line))
-        
+
         return evdict, meta, data
 
 
@@ -313,8 +312,8 @@ class ArduinoProtocol(LineReceiver):
         #if self.debug:
         #    log.msg("Received line: {}".format(line))
 
-        # extract only ascii characters 
-        line = ''.join(filter(lambda x: x in string.printable, line))
+        # extract only ascii characters
+        line = ''.join(filter(lambda x: x in string.printable, str(line)))
 
         # Create a list of sensors like for OW
         # dipatch with the appropriate sensor

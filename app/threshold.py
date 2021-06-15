@@ -6,11 +6,11 @@ MARTAS - threshold application
 ################################
 
 DESCRIPTION:
-Threshold application reads data from a defined source 
+Threshold application reads data from a defined source
 (DB or file, eventually MQTT).
 Threshold values can be defined for keys in the data file,
-notifications can be send out when ceratin criteria are met, 
-and switching commands can be send if thresholds are exceeded 
+notifications can be send out when ceratin criteria are met,
+and switching commands can be send if thresholds are exceeded
 or undergone.
 All threshold processes can be logged and  can be monitored
 by nagios, icinga or martas.
@@ -43,12 +43,12 @@ dbcredentials        :   None
 bufferpath           :   /srv/mqtt/
 
 
-# Logfile (a json style dictionary, which contains statusmessages) 
+# Logfile (a json style dictionary, which contains statusmessages)
 #logfile              :   /var/log/magpy/threshold.log
 logfile              :   /home/leon/Tmp/threshold.log
 
 
-# Notifaction (uses martaslog class, one of email, telegram, mqtt, log) 
+# Notifaction (uses martaslog class, one of email, telegram, mqtt, log)
 notification         :   email
 notificationconfig   :   /etc/martas/notification.cfg
 
@@ -81,7 +81,7 @@ reportlevel          :   partial
 #to be continued...
 
 # SensorID, key:  if sensorid and key of several lines are identical, always the last valid test line defines the message
-#                 Therefore use warning thresholds before alert thresholds   
+#                 Therefore use warning thresholds before alert thresholds
 # Function:       can be one of max, min, median, average(mean), stddev 
 # State:          can be one below, above, equal 
 # Statusmessage:  default is replaced by "Current 'function' 'state' 'value', e.g. (1) "Current average below 5"
@@ -97,13 +97,13 @@ reportlevel          :   partial
 ## then send default statusmessage to the notification system (e.g. email)
 ## and eventually send switchcommand to serial port
 ## IMPORTANT: statusmessage should not contain semicolons, colons and commas; generally avoid special characters
- 
+
 """
 
 from __future__ import print_function
 from __future__ import unicode_literals
 
-# Define packges to be used (local refers to test environment) 
+# Define packges to be used (local refers to test environment)
 # ------------------------------------------------------------
 from magpy.stream import DataStream, KEYLIST, NUMKEYLIST, read
 from magpy.database import mysql,readDB
@@ -129,7 +129,6 @@ class sp(object):
     configdict['dbcredentials'] = 'cobsdb'
     configdict['database'] = 'cobsdb'
     configdict['reportlevel'] = 'partial'
-    configdict['notification'] = 'email'
     configdict['notification'] = 'log'
     valuenamelist = ['sensorid','timerange','key','value','function','state','statusmessage','switchcommand']
     #valuedict = {'sensorid':'DS18B20','timerange':1800,'key':'t1','value':5,'function':'average','state':'below','message':'on','switchcommand':'None'}
@@ -159,51 +158,79 @@ def is_number(s):
     except ValueError:
         return False
 
-def GetConf(path):
-    """
-    DESCRIPTION:
-        read default configuration paths etc from a file
-        Now: just define them by hand
-    PATH:
-        defaults are stored in magpymqtt.conf
 
-        File looks like:
-        # Configuration data for data transmission using MQTT (MagPy/MARTAS)
+def GetConf2(path, confdict={}):
     """
-    # Init values
+    Version 2020-10-28
+    DESCRIPTION:
+       can read a text configuration file and extract lists and dictionaries
+    VARIBALES:
+       path             Obvious
+       confdict         provide default values
+    SUPPORTED:
+       key   :    stringvalue                                 # extracted as { key: str(value) }
+       key   :    intvalue                                    # extracted as { key: int(value) }
+       key   :    item1,item2,item3                           # extracted as { key: [item1,item2,item3] }
+       key   :    subkey1:value1;subkey2:value2               # extracted as { key: {subkey1:value1,subkey2:value2} }
+       key   :    subkey1:value1;subkey2:item1,item2,item3    # extracted as { key: {subkey1:value1,subkey2:[item1...]} }
+    """
+    exceptionlist = ['bot_id']
+
+    def is_number(s):
+        try:
+            float(s)
+            return True
+        except ValueError:
+            return False
+
     try:
         config = open(path,'r')
         confs = config.readlines()
-
         for conf in confs:
-            conflst = conf.split(' : ')
-            if conf.startswith('#'): 
+            conflst = conf.split(':')
+            if conflst[0].strip() in exceptionlist or is_number(conflst[0].strip()):
+                # define a list where : occurs in the value and is not a dictionary indicator
+                conflst = conf.split(':',1)
+            if conf.startswith('#'):
                 continue
             elif conf.isspace():
                 continue
             elif len(conflst) == 2:
-                if is_number(conflst[0]):
-                    # extract parameterlist
-                    key = conflst[0].strip()
-                    values = conflst[1].strip().split(';')
-                    valuedict = {}
-                    if not len(values) in [len(sp.valuenamelist), len(sp.valuenamelist)-1]:
-                        print ("PARAMETER: provided values differ from the expected amount - please check")
-                    else:
-                        for idx,val in enumerate(values):
-                            valuedict[sp.valuenamelist[idx]] = val.strip()
-                        sp.parameterdict[key] = valuedict
+                conflst = conf.split(':',1)
+                key = conflst[0].strip()
+                value = conflst[1].strip()
+                # Lists
+                if value.find(',') > -1:
+                    value = value.split(',')
+                    value = [el.strip() for el  in value]
+                try:
+                    confdict[key] = int(value)
+                except:
+                    confdict[key] = value
+            elif len(conflst) > 2:
+                # Dictionaries
+                if conf.find(';') > -1 or len(conflst) == 3:
+                    ele = conf.split(';')
+                    main = ele[0].split(':')[0].strip()
+                    cont = {}
+                    for el in ele:
+                        pair = el.split(':')
+                        # Lists
+                        subvalue = pair[-1].strip()
+                        if subvalue.find(',') > -1:
+                            subvalue = subvalue.split(',')
+                            subvalue = [el.strip() for el  in subvalue]
+                        try:
+                            cont[pair[-2].strip()] = int(subvalue)
+                        except:
+                            cont[pair[-2].strip()] = subvalue
+                    confdict[main] = cont
                 else:
-                    key = conflst[0].strip()
-                    value = conflst[1].strip()
-                    sp.configdict[key] = value
+                    print ("Subdictionary expected - but no ; as element divider found")
     except:
-        print ("Problems when loading conf data from file...")
-        #return ({}, {})
-        print ("Could not obtain configuration data - aborting")
-        sys.exit()
+        print ("Problems when loading conf data from file. Using defaults")
 
-    return (sp.configdict, sp.parameterdict)
+    return confdict
 
 
 def GetData(source, path, db, dbcredentials, sensorid, amount, startdate=None, debug=False):
@@ -211,7 +238,7 @@ def GetData(source, path, db, dbcredentials, sensorid, amount, startdate=None, d
     DESCRIPTION:
     read the appropriate amount of data from the data file, database or mqtt stream
     """
- 
+
     data = DataStream()
     msg = ''
     if not startdate:
@@ -237,12 +264,12 @@ def GetData(source, path, db, dbcredentials, sensorid, amount, startdate=None, d
                 print (msg)
     elif source in ['db','DB','database','Database']:
         db = mysql.connect()
-        data = readDB(db, sensorid, starttime=starttime)        
+        data = readDB(db, sensorid, starttime=starttime)
 
     if debug:
         print ("Got {} datapoints".format(data.length()[0]))
 
-    return (data, msg) 
+    return (data, msg)
 
 def GetTestValue(data=DataStream(), key='x', function='average', debug=False):
     """
@@ -339,6 +366,26 @@ def InterpreteStatus(valuedict, debug=False):
     return msg
 
 
+def AssignParameterlist(namelist=[],confdict={}):
+    """
+    DESCRIPTION:
+        assign the threshold parameters to a dictionary
+    EXAMPLE:
+        para = AssignParameterlist(sp.valuenamelist,conf)
+    """
+    para = {}
+    for i in range(1,9999):
+        valuedict = {}
+        valuelist = confdict.get(str(i),[])
+        if len(valuelist) > 0:
+            if not len(valuelist) in [len(namelist), len(namelist)-1]:
+                print ("PARAMETER: provided values differ from the expected amount - please check")
+            else:
+                for idx,val in enumerate(valuelist):
+                    valuedict[namelist[idx]] = val.strip()
+                para[str(i)] = valuedict
+    return para
+
 def main(argv):
 
     para = sp.parameterdict
@@ -347,10 +394,11 @@ def main(argv):
     configfile = None
     statusdict = {}
     statuskeylist = []
+    travistestrun = False
 
     usagestring = 'threshold.py -h <help> -m <configpath>'
     try:
-        opts, args = getopt.getopt(argv,"hm:U",["configpath="])
+        opts, args = getopt.getopt(argv,"hm:DT",["configpath="])
     except getopt.GetoptError:
         print ('Check your options:')
         print (usagestring)
@@ -384,9 +432,9 @@ def main(argv):
             print ('              serialcfg            :   None')
             print ('              #parameter (all given parameters are checked in the given order, use semicolons for parameter list):')
             print ('              # sensorid; timerange to check; key to check, value, lower or upper bound,statusmessage,resetby,switchcommand(optional)')
-            print ('              1  :  DS18B20XX;1800;t1;5;low;average;on;swP:4:1')
-            print ('              2  :  DS18B20XY;1800;t1;10;high;median;off;swP:4:0')
-            print ('              3  :  DS18B20XZ;600;t2;20;high;max;alarm at date;None')
+            print ('              1  :  DS18B20XX,1800,t1,5,low,average,on,swP:4:1')
+            print ('              2  :  DS18B20XY,1800,t1,10,high,median,off,swP:4:0')
+            print ('              3  :  DS18B20XZ,600,t2,20,high,max,alarm at date,None')
             print ('              #to be continued...')
 
             print ('------------------------------------------------------')
@@ -396,9 +444,14 @@ def main(argv):
         elif opt in ("-m", "--configfile"):
             configfile = arg
             print ("Getting all parameters from configration file: {}".format(configfile))
-            (conf, para) = GetConf(configfile)
-        elif opt in ("-U", "--debug"):
+            conf = GetConf2(configfile, confdict=conf)
+            para = AssignParameterlist(sp.valuenamelist,conf)
+        elif opt in ("-D", "--debug"):
             debug = True
+        elif opt in ("-T", "--Test"):
+            travistestrun = True
+            conf = GetConf2(os.path.join('..','conf','threshold.cfg'))
+            para = AssignParameterlist(sp.valuenamelist,conf)
 
         # TODO activate in order prevent default values
         #if not configfile or conf == {}:
@@ -410,19 +463,18 @@ def main(argv):
         print ("Parameter dictionary: \n{}".format(para))
 
     if not (len(para)) > 0:
-        print ("No parameters given too be checked - aborting") 
+        print ("No parameters given too be checked - aborting")
         sys.exit()
 
 
     try:
-        martaslogpath = os.path.join(conf.get('martasdir'), 'doc')
+        martaslogpath = os.path.join(conf.get('martasdir'), 'core')
         sys.path.insert(1, martaslogpath)
         from martas import martaslog as ml
         logpath = conf.get('bufferpath')
     except:
         print ("Could not import martas logging routines - check MARTAS directory path")
 
- 
     # For each parameter
     for i in range(0,1000):
             valuedict = para.get(str(i),{})
@@ -433,18 +485,22 @@ def main(argv):
                 data = DataStream()
                 testvalue = None
                 evaluate = {}
-                
+
                 # Obtain a magpy data stream of the respective data set
                 if debug:
                     print ("Accessing data from {} at {}: Sensor {} - Amount: {} sec".format(conf.get('source'),conf.get('bufferpath'),valuedict.get('sensorid'),valuedict.get('timerange') ))
 
                 (data,msg1) = GetData(conf.get('source'), conf.get('bufferpath'), conf.get('database'), conf.get('dbcredentials'), valuedict.get('sensorid'),valuedict.get('timerange'), debug=debug , startdate=conf.get('startdate') )
                 (testvalue,msg2) = GetTestValue( data, valuedict.get('key'), valuedict.get('function'), debug=debug) # Returns comparison value(e.g. mean, max etc)
-                if is_number(testvalue):
+                if not testvalue and travistestrun:
+                    print ("Testrun for parameterset {} OK".format(i))
+                elif not testvalue:
+                    print ("Please check your test data set... are bufferfiles existing? Is the sensorid correct?")
+                elif is_number(testvalue):
                     (evaluate, msg) = CheckThreshold(testvalue, valuedict.get('value'), valuedict.get('state'), debug=debug) # Returns statusmessage
                     if evaluate and msg == '':
                         content = InterpreteStatus(valuedict,debug=debug)
-                        # Perform switch and added "switch on/off" to content 
+                        # Perform switch and added "switch on/off" to content
                         if not valuedict.get('switchcommand') in ['None','none',None]:
                             if debug:
                                 print ("Found switching command ... eventually will send serial command (if not done already) after checking all other commands")
@@ -479,6 +535,10 @@ def main(argv):
     receiver = conf.get('notification')
     cfg = conf.get('notificationconfig')
     logfile = conf.get('logfile')
+
+    if travistestrun:
+        print ("Skipping send routines in test run - finished successfully")
+        sys.exit()
 
     if debug:
         print ("New notifications will be send to: {} (Config: {})".format(receiver,cfg))

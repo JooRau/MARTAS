@@ -6,13 +6,14 @@ from __future__ import absolute_import
 # ###################################################################
 
 import re     # for interpretation of lines
+import sys    # for version identification
 import struct # for binary representation
 import socket # for hostname identification
 import string # for ascii selection
 from datetime import datetime, timedelta
 #from twisted.protocols.basic import LineReceiver
 from twisted.python import log
-from magpy.acquisition import acquisitionsupport as acs
+from core import acquisitionsupport as acs
 
 try:
     import pyownet
@@ -77,6 +78,8 @@ if onewire:
                 #log.msg("  -> one wire: could not contact to owhost")
                 return []
             #log.msg("  -> one wire: {}".format(sensorlst))
+            # Python3 checks
+            #if sys.version_info >= (3, 0):
             # compare currently read sensorlst with original sensorlst (eventually from file)
             existingpathlist = [line.get('path') for line in existinglist]
             # Identify attached sensors and their types
@@ -87,7 +90,7 @@ if onewire:
             for el in notfound:
                 if not el in self.removelist:
                     log.msg("OW: sensor with path {} (as listed in sensors.cfg) is not found".format(el))
-                    self.removelist.append(el)            
+                    self.removelist.append(el)
 
             for el in sensorlst:
                 values = {}
@@ -104,6 +107,13 @@ if onewire:
                     # make a dict for each ID
                     path = el+'type'
                     typ = self.owproxy.read(path)
+                    #log.msg(typ)
+                    # Python3 checks
+                    if sys.version_info >= (3, 0):
+                       try:
+                           typ = typ.decode('ascii')
+                       except:
+                           pass 
                     if not typ == 'DS1420': # do not add dongle
                         if el in self.removelist:
                             # el found again
@@ -121,7 +131,7 @@ if onewire:
                             revision = '0001'
                             values['revision'] = revision
                             values['stack'] = 0
-                            values['sensorid'] = typ+'_'+idel+'_'+revision
+                            values['sensorid'] = '{}_{}_{}'.format(typ,idel,revision)
                             log.msg("OW: Writing new sensor input to sensors.cfg ...")
                             success = acs.AddSensor(self.confdict.get('sensorsconf'), values, block='OW')
                             #success = acs.AddSensor(self.confdict.get('sensorsconf'), values, block='OW')

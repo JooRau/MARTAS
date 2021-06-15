@@ -17,9 +17,10 @@ import zipfile
 import tempfile
 from dateutil import parser
 from shutil import copyfile
+import subprocess
 
 try:
-    from doc.martas import martaslog as ml
+    from core.martas import martaslog as ml
 except:
     print ("Martas logging service not available")
 
@@ -33,6 +34,7 @@ Changelog:
 2016-10-10:   RL updated imports, improved help and checked for pure file access
 2017-03-10:   RL activated force option
 2018-10-22:   RL changed all routines considerably
+2020-10-01:   RL included and tested rsync option (not perfect, but well, its working)
 '''
 
 def walk_dir(directory_path, filename, date, dateformat):
@@ -79,7 +81,7 @@ def dir_extract(lines, filename, date, dateformat):
         #print ("Checking line {}".format(line))
         tokens = line.split()
         # Not interested in directories
-        if not tokens[0][0] == "d":
+        if not tokens[0][0] == "d" and len(tokens)==9:
             time_str = tokens[5] + " " + tokens[6] + " " + tokens[7]
             if dateformat in ['ctime','mtime']:
                 # cannot distinguish between mtime and ctime here
@@ -101,7 +103,7 @@ def die(child, errstr):
     child.terminate()
     exit(1)
 
-def ssh_getlist(source, filename, date, dateformat, maxdate, cred=[], pwd_required=True):
+def ssh_getlist(source, filename, date, dateformat, maxdate, cred=[], pwd_required=True, timeout=60):
     """
     Method to extract filename with wildcards or date patterns from a directory listing
     """
@@ -125,6 +127,8 @@ def ssh_getlist(source, filename, date, dateformat, maxdate, cred=[], pwd_requir
 
     COMMAND= "ssh %s@%s '%s';" % (cred[0],cred[2],searchstr)
     child = pexpect.spawn(COMMAND)
+    if timeout:
+        child.timeout=timeout
     if pwd_required:
         i = child.expect([pexpect.TIMEOUT, 'assword: '])
         child.sendline(cred[1])
@@ -135,6 +139,8 @@ def ssh_getlist(source, filename, date, dateformat, maxdate, cred=[], pwd_requir
         die(child, 'ERROR!\nIncorrect password Here is what SSH said:')
     elif i == 2:
         result = child.before
+    if sys.version_info.major == 3:
+        result = result.decode('ascii')
     pathlist = result.split('\r\n')
     pathlist = [elem for elem in pathlist if not elem == '' and not elem == ' ']
     return pathlist
@@ -314,16 +320,16 @@ def main(argv):
     if not remotepath == '':
         source += remotepath
 
-    if not protocol in ['','scp','ftp','SCP','FTP','html']:
+    if not protocol in ['','scp','ftp','SCP','FTP','html','rsync']:
         print('Specify a valid protocol:')
         print('-- check collectfile.py -h for more options and requirements')
         sys.exit()
     if walk:
-        if not protocol == '' and not protocol == 'scp': 
+        if not protocol in ['','scp','rsync']: 
             print(' Walk mode only works for local directories and scp access.')
             print(' Switching walk mode off.')
             walk = False
- 
+
     if not creddb == '':
         print("Accessing data bank ...")
         try:
@@ -448,17 +454,21 @@ def main(argv):
             path = dir_extract(lines, filename, date, dateformat)
             if len(path) > 0:
                 filelist.extend(path)
-    elif protocol in ['scp','SCP']:
+    elif protocol in ['scp','SCP','rsync']:
         if debug:
-            print (" - Getting filelist - by ssh ") 
+            print (" - Getting filelist - by ssh ")
+        pwd_required=True
+        if protocol == 'rsync':
+            pwd_required=False
+            print ("Rsync requires passwordless ssh connection to remote system")
         import pexpect
-        if not dateformat in ['','ctime','mtime']: 
+        if not dateformat in ['','ctime','mtime']:
             for date in datelist:
-                path = ssh_getlist(remotepath, filename, date, dateformat, datetime.utcnow(), cred=[user,password,address])
+                path = ssh_getlist(remotepath, filename, date, dateformat, datetime.utcnow(), cred=[user,password,address],pwd_required=pwd_required)
                 if len(path) > 0:
                     filelist.extend(path)
         else:
-            filelist = ssh_getlist(remotepath, filename, min(datelist), dateformat, max(datelist), cred=[user,password,address])
+            filelist = ssh_getlist(remotepath, filename, min(datelist), dateformat, max(datelist), cred=[user,password,address],pwd_required=pwd_required)
     elif protocol == '':
         if debug:
             print (" - Getting filelist - from local directory ") 
@@ -470,13 +480,13 @@ def main(argv):
     elif protocol == 'html':
         print (filelist)
         sys.exit()
-     
+
     if debug:
         print ("Result")
         print ("-----------------------------")
         print (filelist)
 
-    ###   2.3 Get selected files and copy them to destination 
+    ###   2.3 Get selected files and copy them to destination
     ### -------------------------------------
     ###
     ### only if not protocol == '' and localpath
@@ -534,10 +544,15 @@ def main(argv):
 
             if protocol in ['ftp','FTP']:
                 fhandle = open(destname, 'wb')
-                ftp.retrbinary('RETR ' + f, fhandle.write) 
-                fhandle.close()                                                     
+                ftp.retrbinary('RETR ' + f, fhandle.write)
+                fhandle.close()
             elif protocol in ['scp','SCP']:
                 scptransfer(user+'@'+address+':'+f,destpath,password,timeout=600)
+            elif protocol in ['rsync']:
+                # create a command line string with rsync ### please note,,, rsync requires password less comminuctaion
+                rsyncstring = "rsync -avz -e ssh {} {}".format(user+'@'+address+':'+f,destpath)
+                print ("Executing:", rsyncstring)
+                subprocess.call(rsyncstring.split())
             elif protocol in ['html','HTML']:
                 pass
             elif protocol in ['']:

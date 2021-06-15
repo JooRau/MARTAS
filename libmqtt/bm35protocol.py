@@ -12,7 +12,7 @@ import string # for ascii selection
 from datetime import datetime, timedelta
 from twisted.protocols.basic import LineReceiver
 from twisted.python import log
-from magpy.acquisition import acquisitionsupport as acs
+from core import acquisitionsupport as acs
 import serial # for initializing command
 import os
 
@@ -38,7 +38,7 @@ class BM35Protocol(LineReceiver):
         'confdict' contains a dictionary with general configuration parameters (martas.cfg)
         """
         self.client = client
-        self.sensordict = sensordict    
+        self.sensordict = sensordict
         self.confdict = confdict
         self.count = 0  ## counter for sending header information
         self.sensor = sensordict.get('sensorid')
@@ -107,8 +107,8 @@ class BM35Protocol(LineReceiver):
         except:
             # TODO??? base x mobile?
             log.err('BM35 - Protocol: Output format not supported - use either base, ... or mobile')
- 
-        if typ == "valid": 
+
+        if typ == "valid":
             pressure_raw = float(data[0].strip())
             pressure = float(data[1].strip())
         elif typ == "none":
@@ -132,11 +132,16 @@ class BM35Protocol(LineReceiver):
 
         return returndata, header
 
-         
+
     def lineReceived(self, line):
         topic = self.confdict.get('station') + '/' + self.sensordict.get('sensorid')
-        # extract only ascii characters 
-        line = ''.join(filter(lambda x: x in string.printable, line))
+        # extract only ascii characters
+        try:
+            # convert binary string to ascii (py3)
+            line = line.decode('ascii')
+        except:
+            pass
+        line = ''.join(filter(lambda x: x in string.printable, str(line)))
 
         ok = True
         try:

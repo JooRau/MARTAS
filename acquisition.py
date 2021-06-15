@@ -19,22 +19,22 @@ METHODS:
 acquisition_mqtt.py contains the following methods:
 
 GetSensors: read a local definition file (sensors.txt) which contains information
-            on SensorID, Port, Bausrate (better Serial communication details), active/passive, 
+            on SensorID, Port, Bausrate (better Serial communication details), active/passive,
             init requirements, optional SensorDesc
 
 GetDefaults: read initialization file with local paths, publishing server, ports, etc.
 
 SendInit: send eventually necessary initialization data as defined in sensors.txt
 
-GetActive: Continuously obtain serial data from instrument and convert it to an binary 
+GetActive: Continuously obtain serial data from instrument and convert it to an binary
            information line to be published (using libraries)
 
-GetPassive: Send scheduled request to serial port to obtain serial data from instrument 
+GetPassive: Send scheduled request to serial port to obtain serial data from instrument
             and convert it to an binary information line to be published (using libraries)
 
 1. how to convert incoming serial datalines to magpy.stream contents
 2. an eventual initialization protocol too be send to the serial port before
-3.  
+3.
 call method: defined here
 
 Usage:
@@ -62,7 +62,7 @@ from datetime import datetime
 ## Import MagPy packages
 ## -----------------------------------------------------------
 from magpy.opt import cred as mpcred
-from magpy.acquisition import acquisitionsupport as acs
+from core import acquisitionsupport as acs
 
 ## Import specific MARTAS packages
 ## -----------------------------------------------------------
@@ -106,25 +106,24 @@ msgcount = 0
 SUPPORTED_PROTOCOLS = ['Env','Ow','Lemi','Arduino','GSM90','GSM19','Cs','POS1','MySQL','Lm','Lnm','BM35','Test','GP20S3','Active','ActiveArduino','DSP','Disdro','ad7714','cr1000jc','obsdaq'] # should be provided by MagPy
 """
 Protocol types:
-ok		Env   		: passive		: environment
-ok		Ow		: active (group)	: environment
-ok		Arduino		: passive (group)	: environment
-current work	Ardactive 	: active (group)	: environment
-ok		BM35		: passive 		: environment
-ok      	Lemi		: passive		: mag
-ok      	GSM90		: passive (init)	: mag
-ok      	POS1		: passive (init)	: mag
-written (time test missing)GSM19: passive 		: mag
-ok	 	Cs		: passive 		: mag
--	   	PalmDac 	: passive		: mag
-ok		MySQL		: active (group)	: general db call
--	        Active		: active		: general active call
-current work    ActiveArduino   : active (group)        : all
-current work	CR1000		: active		: all
-ok 		Test 	  	: active                : random number
-ok		Lnm		: active 		: environment
-ok		Disdro		: active 		: environment
-ok              AD7714          : autonomous		: general ADC
+ok		Env   		: py2,py3	: passive		: environment
+ok		Ow		: py2 		: active (group)	: environment
+ok		Arduino		: py2,py3	: passive (group)	: environment
+ok              ActiveArduino   : py2,py3	: active (group)        : all
+ok		BM35		: py2		: passive 		: environment
+ok      	Lemi		: py2,py3	: passive		: mag
+ok      	GSM90		: py2		: passive (init)	: mag
+ok      	POS1		: py2,py3	: passive (init)	: mag
+written (time test missing)GSM19: py2		: passive 		: mag
+ok	 	Cs		: py2,py3	: passive 		: mag
+-	   	PalmDac 	: 		: passive		: mag
+ok		MySQL		: py2		: active (group)	: general db call
+-	        Active		:		: active		: general active call
+current work	CR1000		: py2		: active		: all
+ok 		Test 	  	: py2		: active                : random number
+ok		Lnm		: py2		: active 		: environment
+ok		Disdro		: py2		: active 		: environment
+ok              AD7714          : py2 		: autonomous		: general ADC
 """
 
 def SendInit(confdict,sensordict):
@@ -179,7 +178,7 @@ def ActiveThread(confdict,sensordict, mqttclient, activeconnections):
     do_every(rate, protocol.sendRequest)
 
     activeconnection = {sensorid: protocolname}
-    log.msg("  -> active connection established ... sampling every {} sec".format(rate)) 
+    log.msg("  -> active connection established ... sampling every {} sec".format(rate))
 
     return activeconnection
 
@@ -250,7 +249,7 @@ def onConnect(client, userdata, flags, rc):
         log.msg("Moving on...")
     elif rc == 5 and msgcount < 4:
         log.msg("Authetication required")
-    msgcount += 1 
+    msgcount += 1
     # add a counter here with max logs
 
 def onMessage(client, userdata, message):
@@ -388,7 +387,7 @@ def main(argv):
         client.connect(broker, mqttport, mqttdelay)
         client.loop_start()
     except:
-        log.msg("Critical error - no network connection available during startup - check whether data is recorded")
+        log.msg("Critical error - no network connection available during startup or mosquitto server not running - check whether data is recorded")
 
     establishedconnections = {}
     ## Connect to serial port (sensor dependency) -> returns publish 

@@ -9,7 +9,7 @@ from magpy.database import *
 from magpy.opt import cred as mpcred
 
 try:
-    from doc.martas import martaslog as ml
+    from core.martas import martaslog as ml
 except:
     print ("Martas logging service not available")
 
@@ -51,7 +51,7 @@ def main(argv):
             print ('-------------------------------------')
             print ('Options:')
             print ('-c (required) : provide the shortcut to the data bank credentials as defined by addcred.py')
-            print ('-b            : begin: end = begin - depth(days)')
+            print ('-b            : begin: not used so far')
             print ('-s            : list sensor IDs to skip (comma separated list)')
             print ('-i            : samplingrateratio for deleting old db entries - default is 12')
             print ('              : deleting data older than samplingrate(sec)*12 days.')

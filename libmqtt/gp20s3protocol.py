@@ -12,7 +12,7 @@ import string # for ascii selection
 from datetime import datetime, timedelta
 from twisted.protocols.basic import LineReceiver
 from twisted.python import log
-from magpy.acquisition import acquisitionsupport as acs
+from core import acquisitionsupport as acs
 import numpy as np
 
 ## GEM -GP20S3 protocol
@@ -323,9 +323,9 @@ class GP20S3Protocol(LineReceiver):
 
         # Defaulttopic
         topic = self.confdict.get('station') + '/' + self.sensordict.get('sensorid')
-        # extract only ascii characters 
-        line = ''.join(filter(lambda x: x in string.printable, line))
-
+        # extract only ascii characters
+        line = ''.join(filter(lambda x: x in string.printable, str(line)))
+        line = line.replace("b'","").replace("'","")
         ok = True
         try:
             splitline = line.split()

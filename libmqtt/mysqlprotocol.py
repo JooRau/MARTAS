@@ -14,7 +14,7 @@ from datetime import datetime, timedelta
 from twisted.protocols.basic import LineReceiver
 from twisted.python import log
 
-from magpy.acquisition import acquisitionsupport as acs
+from core import acquisitionsupport as acs
 from magpy.stream import KEYLIST
 import magpy.opt.cred as mpcred
 import magpy.database as mdb
@@ -235,10 +235,22 @@ class MySQLProtocol(object):
             sql2 = 'SELECT Sensorkeys FROM SENSORS WHERE SensorID LIKE "{}"'.format(sensorid)
             sql3 = 'SELECT ColumnUnits FROM DATAINFO WHERE SensorID LIKE "{}"'.format(sensorid)
             sql4 = 'SELECT ColumnContents FROM DATAINFO WHERE SensorID LIKE "{}"'.format(sensorid)
-            elem = getList(sql1)[0].split(',')
-            keyssens = getList(sql2)[0].split(',')
-            unit = getList(sql3)[0].split(',')
-            cont = getList(sql4)[0].split(',')
+            try:
+                elem = getList(sql1)[0].split(',')
+            except:
+                elem =[]
+            try:
+                keyssens = getList(sql2)[0].split(',')
+            except:
+                keyssens =[]
+            try:
+                unit = getList(sql3)[0].split(',')
+            except:
+                unit =[]
+            try:
+                cont = getList(sql4)[0].split(',')
+            except:
+                cont =[]
             units, elems = [], []
             for key in keystab:
                 try:

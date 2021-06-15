@@ -2,7 +2,7 @@
 
 
 ## Helper methods for MARTAS
-## the helper creates 
+## the helper creates
 ## 1. a startupscript for /etc/init.d
 ##    calling the collector method
 ## 2. a configuration file for the broker
@@ -24,11 +24,15 @@ STATION="wic"
 DETAILS="cobsdb"
 MQTTAUTH="no"
 MQTTCRED="mqtt"
+CREDPATH="/home/username/.magpycred"
+MQTTUSER="cobs"
 tvar=""
 
 current="$(pwd)"
 cd ..
 ACQUPATH="$(pwd)"
+cd ..
+CREDPATH="$(pwd)/.magpycred"
 cd "$current"
 
 echo "Helper for adding new acquisition job "
@@ -83,6 +87,14 @@ if [ "$MQTTAUTHT" = "yes" ]; then
    if [ "$MQTTCREDT" != "$tvar" ]; then
       MQTTCRED=$MQTTCREDT
    fi
+   read -p "Credentials path (default = $CREDPATH): " CREDPATHT
+   if [ "CREDPATHT" != "$tvar" ]; then
+      CREDPATH=$CREDPATHT
+   fi
+   read -p "MQTT username (should be identical as provided in credentials) (default = $MQTTUSER): " MQTTUSERT
+   if [ "$MQTTUSERT" != "$tvar" ]; then
+      MQTTUSER=$MQTTUSERT
+   fi
 fi
 
 # create directories if not existing
@@ -95,6 +107,36 @@ mkdir -p $CFGPATH
 # init
 mkdir -p $INITPATH
 
+# check python packages
+# ------------------
+if $PYPATH -c "import geomagpy" &> /dev/null; then
+    echo 'geomagpy package already installed'
+else
+    echo 'installing geomagpy python package ...'
+    $PYPATH -m pip install geomagpy
+fi
+
+if $PYPATH -c "import pyserial" &> /dev/null; then
+    echo 'pyserial package already installed'
+else
+    echo 'installing telepot pyserial package ...'
+    $PYPATH -m pip install pyserial
+fi
+
+if $PYPATH -c "import paho-mqtt" &> /dev/null; then
+    echo 'paho-mqtt package already installed'
+else
+    echo 'installing paho-mqtt python package ...'
+    $PYPATH -m pip install paho-mqtt
+fi
+
+if $PYPATH -c "import twisted" &> /dev/null; then
+    echo 'twisted package already installed'
+else
+    echo 'installing twisted python package ...'
+    $PYPATH -m pip install twisted
+fi
+
 # update configuration
 # ------------------
 # station
@@ -106,8 +148,8 @@ CONFFILE=$CFGPATH/martas.cfg
 SENSFILE=$CFGPATH/sensors.cfg
 
 # copy but not overwrite if existing
-cp -n martas.cfg $CONFFILE
-cp -n sensors.cfg $SENSFILE
+cp -n ../conf/martas.cfg $CONFFILE
+cp -n ../conf/sensors.cfg $SENSFILE
 cp -n ../init/*.sh $INITPATH
 
 DUMMYLOGPATH="/logpath"
@@ -121,13 +163,25 @@ sed -i "s+${DUMMYLOGPATH}+${LOGPATH}/martas.log+g" $CONFFILE
 sed -i "s+${DUMMYSENSORPATH}+${SENSFILE}+g" $CONFFILE
 sed -i "s+${DUMMYINIT}+${INITPATH}/+g" $CONFFILE
 
+#mqttuser  :  username
+#credentialpath  :  /home/username/.magpycred
+
+
+if [ "$MQTTAUTHT" = "yes" ]; then
+   DUMMYCREDPATH="#credentialpath  :  /home/username/.magpycred"
+   DUMMYMQTTUSER="#mqttuser  :  username"
+   NEWMQTTUSER="mqttuser  :  ${MQTTUSER}"
+   NEWCREDPATH="credentialpath  :  ${CREDPATH}"
+   sed -i "s+${DUMMYCREDPATH}+${NEWCREDPATH}+g" $CONFFILE
+   sed -i "s+${DUMMYMQTTUSER}+${NEWMQTTUSER}+g" $CONFFILE
+fi
+
 # modify logrotate
 # ------------------
 if [ "$LOGPATH" != "$stdout" ]; then
    cp martas.logrotate /etc/logrotate.d/martas
    sed -i "s+${DUMMYLOGPATH}+${LOGPATH}/martas.log+g" /etc/logrotate.d/martas
 fi
-
 
 # install as service
 # ------------------
@@ -148,6 +202,13 @@ else
    sed -i "s+${DUMMYCONF}+ -m ${CONFFILE}+g" /etc/init.d/$ACQUISITION
 fi
 
+# Replace DUMMY values in all init files
+INITFILES=$INITPATH/*.sh
+DUMMYMARTASPATH="/my/home/MARTAS"
+sed -i "s+${DUMMYPYTHON}+${PYPATH}+g" $INITFILES
+sed -i "s+${DUMMYMARTASPATH}+${ACQUPATH}+g" $INITFILES
+
+
 chmod 755 /etc/init.d/$ACQUISITION
 chown root:root /etc/init.d/$ACQUISITION
 update-rc.d $ACQUISITION defaults
@@ -160,6 +221,3 @@ echo "/etc/init.d/$ACQUISITION {start|stop|restart|status}"
 echo "----------------------------------------"
 echo "(to remove use: sudo sh removemartas.sh)"
 echo "----------------------------------------"
-
-
-

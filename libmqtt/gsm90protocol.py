@@ -12,7 +12,7 @@ import string # for ascii selection
 from datetime import datetime, timedelta
 from twisted.protocols.basic import LineReceiver
 from twisted.python import log
-from magpy.acquisition import acquisitionsupport as acs
+from core import acquisitionsupport as acs
 
 
 ## GEM -GSM90 protocol
@@ -176,7 +176,7 @@ class GSM90Protocol(LineReceiver):
 
         topic = self.confdict.get('station') + '/' + self.sensordict.get('sensorid')
         # extract only ascii characters 
-        line = ''.join(filter(lambda x: x in string.printable, line))
+        line = ''.join(filter(lambda x: x in string.printable, str(line)))
 
         ok = True
         try:
