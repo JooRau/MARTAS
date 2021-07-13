@@ -143,7 +143,7 @@ class obsdaqProtocol(LineReceiver):
                 triggerflag = d[3][19]
             else:
                 # TODO ask Roman
-                pass
+                typ = "none"
             sup = d[3].split(':')
             if len(sup) == 2:
                 voltage = int(sup[1][0:4],16) ^ 0x8000 - 0x8000
@@ -169,10 +169,11 @@ class obsdaqProtocol(LineReceiver):
                     log.msg(str(p)+'\t',end='')
                     log.msg(str(q)+'\t',end='')
                     log.msg(str(r)+'\t')
-
-        # TODO check data
-        typ = "valid"
-        # log.err('BM35 - Protocol: Output format not supported - use either base, ... or mobile')
+            typ = "valid"
+        else:
+            typ = "none"
+            if self.debug:
+                log.msg(':R not found')
  
         if not typ == "valid": 
             dontsavedata = True

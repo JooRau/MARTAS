@@ -3,11 +3,15 @@
 MARTASPATH="/home/pi/MARTAS"
 APPPATH=$MARTASPATH"/app"
 
-# set PalmAcq into idle mode
+# set PalmAcq into idle mode (command mode)
 python $APPPATH/palmacq.py -p
 sleep 2
 python $APPPATH/palmacq.py -p
 sleep 2
+# TODO better
+# wait for GPS loopseconds=18
+python $APPPATH/palmacq.py -g
+
 # set PalmAcq into Transparent mode to access ObsDAQ
 python $APPPATH/palmacq.py -t
 sleep 2
