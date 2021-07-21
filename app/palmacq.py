@@ -32,6 +32,7 @@ ser = serial.Serial(port, baudrate=baudrate , parity='N', bytesize=8, stopbits=1
 obsbaud = '19200'
 escFromTranspChars = '\x00\x1b'
 # GAINMAX is 10 for +/-10V (cc=02) and 5 for +/-5V (cc=03), see WS command
+# needed only for option -o --output, no affect on data
 GAINMAX = 10
 
 global QUIET

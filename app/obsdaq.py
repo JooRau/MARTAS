@@ -14,6 +14,16 @@ from matplotlib.dates import date2num, num2date
 import numpy as np
 import time
 
+# Relative import of core methods as long as martas is not configured as package
+scriptpath = os.path.dirname(os.path.realpath(__file__))
+coredir = os.path.abspath(os.path.join(scriptpath, '..', 'core'))
+sys.path.insert(0, coredir)
+from acquisitionsupport import GetConf2 as GetConf2
+
+# path of config file
+#obsdaqconf=""
+obsdaqconfpath="/home/pi/MARTAS/conf/obsdaq.cfg"
+
 # settings for PalmDaq
 port = '/dev/ttyUSB0'
 baudrate='57600'
@@ -35,6 +45,7 @@ FCLK = '98'
     # cc ... Range mode (gain)
     #   02 ...  +/-10V
     #   03 ...  +/-5V
+    #   04 ...  +/-2.5V
 CC = '02'
     # dd ... Data output rate (here examples, see Table 6 and Table 9)
     #   03 .. 3.2 Hz
@@ -47,6 +58,15 @@ CC = '02'
 DD = '23'
 #DD = '63'
 
+# setting internal trigger timing
+    # command $AAPPeeeeffff
+    # eeee ... triggering interval
+    # ffff ... low-level time
+EEEE = '3C00'
+FFFF = '0600'
+#EEEE = '0BFF'
+#FFFF = '026D'
+
 # program offset calibration constants
     # command $AAnWOaaaaaa
 #OFFSET = ['','','']
@@ -57,17 +77,20 @@ OFFSET = ['FFF19A','FFF41B','FFF70C']
 #FULLSCALE = ['','','']
 FULLSCALE = ['3231C0','32374B','323A7E']
 
-# setting internal trigger timing
-    # command $AAPPeeeeffff
-    # eeee ... triggering interval
-    # ffff ... low-level time
-EEEE = '3C00'
-FFFF = '0600'
-#EEEE = '0BFF'
-#FFFF = '026D'
-
+# ----------------------------------
 # please don't edit beyond this line
 # ----------------------------------
+
+# get constants from config file
+
+if not obsdaqconfpath=="":
+    conf = GetConf2(obsdaqconfpath)
+    CC = str(conf.get('CC')).zfill(2)
+    DD = str(conf.get('DD')).zfill(2)
+    EEEE = str(conf.get('EEEE')).zfill(4)
+    FFFF = str(conf.get('FFFF')).zfill(4)
+    OFFSET = [conf.get('OFFSETX'),conf.get('OFFSETY'),conf.get('OFFSETZ')]
+    FULLSCALE = [conf.get('FULLSCALEX'),conf.get('FULLSCALEY'),conf.get('FULLSCALEZ')]
 
 # some calculations
 
@@ -359,11 +382,7 @@ def main(argv):
             print ('setting 24-bit channel configuration')
             # cc=02..+/-10V
             # dd=23..12.8Hz
-            command('$010WS0201'+CC+DD)
-            time.sleep(1)
-            command('$011WS0201'+CC+DD)
-            time.sleep(1)
-            command('$012WS0201'+CC+DD)
+            command('$01'+ch+'WS0201'+CC+DD)
             time.sleep(1)
 
             print ('performing offset calibration of channel '+arg)

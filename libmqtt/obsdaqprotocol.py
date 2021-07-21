@@ -161,10 +161,10 @@ class obsdaqProtocol(LineReceiver):
                 supplement = True
                 voltage = int(sup[1][0:4],16) ^ 0x8000 - 0x8000
                 voltage = float(voltage) * 2.6622e-3 + 9.15
-                voltage = int(round(voltage*1000)/1000)
+                voltage = round(voltage*1000)/1000.
                 temp = int(sup[1][4:8],16) ^ 0x8000 - 0x8000
                 temp = float(temp) / 128.
-                temp = int(round(temp*1000)/1000)
+                temp = round(temp*1000)/1000.
                 p = (int('0x'+sup[1][8:12],16) ^ 0x8000) - 0x8000
                 p = float(p) / 8000.0
                 p = int(round(p*1000)/1000)
