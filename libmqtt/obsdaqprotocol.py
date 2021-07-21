@@ -2,21 +2,17 @@ from __future__ import print_function
 from __future__ import absolute_import
 
 """
-Protocol for the combination FGE, PalmAcq and ObsDAQ
-Temporary settings here in the code
-constants for fluxgate sensor SE.S013 and electronic box SE.E0379
+Protocol for PalmAcq and ObsDAQ by MINGEO, Hungary
+
+works for ObsDaqs since 55Fxxx serial numbers when connected to a
+PalmAcq by a combined port cable
+The MARTAS host is connected to PalmAcq by USB cable
+
+Settings are made in a config file defined in martas.cfg like
+obsdaqconfpath  :  /etc/martas/obsdaq.cfg
+
 """
 
-# ObsDAQ gain set to +/-10V
-GAINMAX = 10
-# scale factors for given instruments (pT/V)
-#SCALE_X = 312300
-#SCALE_Y = 310300
-#SCALE_Z = 318500
-# mV temporary
-SCALE_X = 1000000
-SCALE_Y = 1000000
-SCALE_Z = 1000000
 
 # ###################################################################
 # Import packages
@@ -31,7 +27,14 @@ from twisted.protocols.basic import LineReceiver
 from twisted.python import log
 from magpy.acquisition import acquisitionsupport as acs
 import serial # for initializing command
-import os
+import os,sys
+
+# Relative import of core methods as long as martas is not configured as package
+scriptpath = os.path.dirname(os.path.realpath(__file__))
+coredir = os.path.abspath(os.path.join(scriptpath, '..', 'core'))
+sys.path.insert(0, coredir)
+from acquisitionsupport import GetConf2 as GetConf2
+
 
 def datetime2array(t):
     return [t.year,t.month,t.day,t.hour,t.minute,t.second,t.microsecond]
@@ -99,6 +102,9 @@ class obsdaqProtocol(LineReceiver):
         else:
             log.msg('  -> Debug mode = {}'.format(debugtest))
 
+        # get obsdaq specific constants
+        self.obsdaqconf = GetConf2(self.confdict.get('obsdaqconfpath'))
+
     def connectionMade(self):
         log.msg('  -> {} connected.'.format(self.sensor))
 
@@ -116,14 +122,16 @@ class obsdaqProtocol(LineReceiver):
 
         packcode = '6hLlll'
         # int!
+        # TODO units, names and factors general 
         header = "# MagPyBin %s %s %s %s %s %s %d" % (self.sensor, '[x,y,z]', '[X,Y,Z]', '[nT,nT,nT]', '[1000,1000,1000]', packcode, struct.calcsize(packcode))
-
+        # TODO finish this
         packcodeSup = '6hL....'
         headerSup = "# MagPyBin %s %s %s %s %s %s %d" % (self.sensor, '[var1,t2,var3,var4,var5]', '[Vcc,Telec,sup1,sup2,sup3]', '[V,degC,V,V,V]', '[1000,1000,1000,1000,1000]', packcode, struct.calcsize(packcode))
 
         if data.startswith(':R'):
-            # :R,00,200131.143739.617,*0259FEFFF1BFFFFCEDL:04AC11CC000B000B000B
+            # :R,00,YYMMDD.hhmmss.sss,*xxxxxxyyyyyyzzzzzzt
             # :R,00,YYMMDD.hhmmss.sss,*xxxxxxyyyyyyzzzzzzt:vvvvttttppppqqqqrrrr
+            # :R,00,200131.143739.617,*0259FEFFF1BFFFFCEDL:04AC11CC000B000B000B
             d = data.split(',')
             Y = int('20'+d[2][0:2])
             M = int(d[2][2:4])
@@ -134,6 +142,10 @@ class obsdaqProtocol(LineReceiver):
             us = int(d[2][14:17]) * 1000
             timestamp = datetime(Y,M,D,h,m,s,us)
             if d[3][0] == '*':
+                GAINMAX = self.obsdaqconf.get('GAINMAX')
+                SCALE_X = self.obsdaqconf.get('SCALE_X')
+                SCALE_Y = self.obsdaqconf.get('SCALE_Y')
+                SCALE_Z = self.obsdaqconf.get('SCALE_Z')
                 x = (int('0x'+d[3][1:7],16) ^ 0x800000) - 0x800000
                 x = float(x) * 2**-23 * GAINMAX * SCALE_X
                 y = (int('0x'+d[3][7:13],16) ^ 0x800000) - 0x800000
@@ -142,20 +154,26 @@ class obsdaqProtocol(LineReceiver):
                 z = float(z) * 2**-23 * GAINMAX * SCALE_Z
                 triggerflag = d[3][19]
             else:
-                # TODO ask Roman
                 typ = "none"
+            supplement = False
             sup = d[3].split(':')
             if len(sup) == 2:
+                supplement = True
                 voltage = int(sup[1][0:4],16) ^ 0x8000 - 0x8000
                 voltage = float(voltage) * 2.6622e-3 + 9.15
+                voltage = int(round(voltage*1000)/1000)
                 temp = int(sup[1][4:8],16) ^ 0x8000 - 0x8000
                 temp = float(temp) / 128.
+                temp = int(round(temp*1000)/1000)
                 p = (int('0x'+sup[1][8:12],16) ^ 0x8000) - 0x8000
                 p = float(p) / 8000.0
+                p = int(round(p*1000)/1000)
                 q = (int('0x'+sup[1][8:12],16) ^ 0x8000) - 0x8000
                 q = float(q) / 8000.0
+                q = int(round(q*1000)/1000)
                 r = (int('0x'+sup[1][8:12],16) ^ 0x8000) - 0x8000
                 r = float(r) / 8000.0
+                r = int(round(r*1000)/1000)
             if self.debug:
                 log.msg(str(timestamp)+'\t',end='')
                 log.msg(str(x)+'\t',end='')
@@ -203,9 +221,11 @@ class obsdaqProtocol(LineReceiver):
         # extract only ascii characters 
         line = ''.join(filter(lambda x: x in string.printable, line))
         ok = True
-        try:
+        #try:
+        if 1:
             data, head = self.processData(line)
-        except:
+        #except:
+        else:
             print('{}: Data seems not to be PalmAcq data: Looks like {}'.format(self.sensordict.get('protocol'),line))
             ok = False
 

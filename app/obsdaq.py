@@ -3,6 +3,7 @@
 a script to communicate with ObsDAQ assuming:
     connected to a PalmAcq
     PalmAcq is in Transparent mode (see manual)
+    supported only baud rate 57600
 """
 from __future__ import print_function
 import sys, os, socket, getopt
@@ -82,6 +83,8 @@ drate = DDdic[DD] * FCLKdic[FCLK] / FCLKdic['98']
 eeee = int('0x'+EEEE,16)*micros
 ffff = int('0x'+FFFF,16)*micros
 
+global QUIET
+QUIET = False
 
 def lineread(ser,eol):
             # FUNCTION 'LINEREAD'
@@ -121,15 +124,18 @@ def send_command(ser,command,eol,hex=False):
 ser = serial.Serial(port, baudrate=baudrate , parity='N', bytesize=8, stopbits=1, timeout=2)
 
 def command(call):
-    print(call)
+    global QUIET
+    if not QUIET:
+        print(call)
     answer, actime = send_command(ser,call,eol)
-    print(answer)
+    if not QUIET:
+        print(answer)
     return answer
 
 
 def main(argv):
     try:
-        opts, args = getopt.getopt(argv,"hvcn:f:apsodi",[])
+        opts, args = getopt.getopt(argv,"hvcn:f:apsodiq",[])
     except getopt.GetoptError:
         print ('unknown option')
         sys.exit(2)
@@ -144,7 +150,7 @@ def main(argv):
             print ('  python palmacq.py -t')
             print ('-------------------------------------')
             print ('Usage:')
-            print ('obsdaq.py -v -c -n channel -f channel -a -p -s -o -d -i')
+            print ('obsdaq.py -q -v -c -n channel -f channel -a -p -s -o -d -i')
             print ('-------------------------------------')
             print ('Options:')
             print ('-v          : show version of ObsDAQ and quit')
@@ -160,22 +166,27 @@ def main(argv):
             print ('')
             print ('-d          : show definitions made in this file')
             print ('-i          : show info about ObsDAQ settings')
+            print ("-q          : quiet: don't show commands and answers. Has to be first option.")
             print ('-------------------------------------')
             print ('Examples:')
             print ('python obsdaq.py -t')
             sys.exit()
-        elif opt in ("-v", "--version"):
+        if opt in ("-v", "--version"):
             answer = ser.read(10)
             if answer:
-                print ('it seems, that acquisition is in progress.')
-                print ('please stop acquisition using -p or --stop option first!')
+                print ('ObsDaq: it seems, that acquisition is in progress.')
+                print ('ObsDaq: please stop acquisition using -p or --stop option first!')
                 exit(2)
-            print ('Firmware version and firmware date')
+            print ('ObsDaq: Firmware version and firmware date')
             command('$01F')
-            print ('Module name (firmware version)')
+            print ('ObsDaq: Module name (firmware version)')
             command('$01M')
+        if opt in ("-q", "--quiet"):
+            global QUIET
+            QUIET = True
         elif opt in ("-p", "--stop"):
             # stop acquisition
+            print('ObsDaq: trying to stop acquisition...')
             command('#01ST')
             stopped = False
             while not stopped:
@@ -184,19 +195,19 @@ def main(argv):
                 if answer:
                     print ('Answer from ObsDAQ:')
                     print (answer)
-                    print ('please wait!')
+                    print ('ObsDaq: please wait!')
                     for i in range(100):
                         ser.write('|||||||||||||||||||||||||||||||||||\r')
                 else:
-                    print ('stopped')
+                    print ('ObsDaq: stopped')
                     stopped = True    
             # stop free run or triggered mode, enter idle mode
             command('#01ST')
         elif opt in ("-i", "--info"):
             answer = ser.read(10)
             if answer:
-                print ('it seems, that acquisition is in progress.')
-                print ('please stop acquisition using -p or --stop option first!')
+                print ('ObsDaq: it seems, that acquisition is in progress.')
+                print ('ObsDaq: please stop acquisition using -p or --stop option first!')
                 exit(2)
             print ('Information - please refer to ObsDAQ manual')
             print ('Serial number')
@@ -253,16 +264,16 @@ def main(argv):
         elif opt in ("-c", "--calib"):
             answer = ser.read(10)
             if answer:
-                print ('it seems, that acquisition is in progress.')
-                print ('please stop acquisition using -p or --stop option first!')
+                print ('ObsDaq: it seems, that acquisition is in progress.')
+                print ('ObsDaq: please stop acquisition using -p or --stop option first!')
                 exit(2)
 
-            print ('turning off triggering')
+            print ('ObsDaq: turning off triggering')
             command('#01PP00000000')
             # wait a second
             time.sleep(1)
 
-            print ('setting 24-bit channel configuration')
+            print ('ObsDaq: setting 24-bit channel configuration')
             # cc=02..+/-10V
             # dd=23..12.8Hz
             command('$010WS0201'+CC+DD)
@@ -295,27 +306,37 @@ def main(argv):
                         ans = command('$01'+str(i)+'RR')
                         ans = ans.split('R')[1]
                         if ans == '0':
-                            print ('finished')
+                            print ('ObsDaq: finished calibration')
                             calfin = True
             
             # get 24-bit channel configuration
             print ('channel configuration')
-            command('$010RS')
-            command('$011RS')
-            command('$012RS')
+            a=command('$010RS')
+            b=command('$011RS')
+            c=command('$012RS')
+            if QUIET:
+                print('\t'+a+'\t'+b+'\t'+c)
+                accdd='\t+/-'+str(CCdic[a[7:9]])+'V  '+str(DDdic[a[9:11]])+'Hz'
+                bccdd='\t+/-'+str(CCdic[b[7:9]])+'V  '+str(DDdic[b[9:11]])+'Hz'
+                cccdd='\t+/-'+str(CCdic[c[7:9]])+'V  '+str(DDdic[c[9:11]])+'Hz'
+                print(accdd+'\t'+bccdd+'\t'+cccdd)
             time.sleep(1)
 
             # get offset calibration constants
             print ('offset calibration constants')
-            command('$010RO')
-            command('$011RO')
-            command('$012RO')
+            a=command('$010RO')
+            b=command('$011RO')
+            c=command('$012RO')
+            if QUIET:
+                print('\t'+a+'\t'+b+'\t'+c)
 
             # get full-scale calibration constants
             print ('full scale calibration constants')
-            command('$010RF')
-            command('$011RF')
-            command('$012RF')
+            a=command('$010RF')
+            b=command('$011RF')
+            c=command('$012RF')
+            if QUIET:
+                print('\t'+a+'\t'+b+'\t'+c)
 
         elif opt in ("-n", "--offsetcal"):
             try:
@@ -420,7 +441,7 @@ def main(argv):
                 print ('WARNING: Triggering interval - Low-level time is higher than the Digital filter output rate!')
 
         elif opt in ("-a", "--start"):
-            print ('starting acquisition')
+            print ('ObsDaq: starting acquisition')
             # set internal trigger timing (Table 9)
             command('#01PP'+EEEE+FFFF)
             # wait a second

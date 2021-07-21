@@ -34,6 +34,8 @@ escFromTranspChars = '\x00\x1b'
 # GAINMAX is 10 for +/-10V (cc=02) and 5 for +/-5V (cc=03), see WS command
 GAINMAX = 10
 
+global QUIET
+QUIET = False
 
 def lineread(ser,eol):
             # FUNCTION 'LINEREAD'
@@ -72,16 +74,19 @@ def send_command(ser,command,eol,hex=False):
 
 
 def command(call):
-    print(call)
+    global QUIET
+    if not QUIET:
+        print(call)
     answer, actime = send_command(ser,call,eol)
-    print(answer)
+    if not QUIET:
+        print(answer)
     return answer
 
 
 
 def main(argv):
     try:
-        opts, args = getopt.getopt(argv,"hvtpfd:gsoi",[])
+        opts, args = getopt.getopt(argv,"hvtpfd:gsoiq",[])
     except getopt.GetoptError:
         print ('unknown option')
         sys.exit(2)
@@ -92,7 +97,7 @@ def main(argv):
             print ('Sending data to PalmAcq resp. ObsDAQ')
             print ('-------------------------------------')
             print ('Usage:')
-            print ('palmobs.py -v -t -p -f -d [R/P/G] -g -s -i -o')
+            print ('palmobs.py -q -v -t -p -f -d [R/P/G] -g -s -i -o')
             print ('-------------------------------------')
             print ('Options:')
             print ('-v          : show version of PalmAcq and quit')
@@ -108,33 +113,38 @@ def main(argv):
             print ('-s          : show output from serial line')
             print ('-o          : show the formatted output')
             print ('-i          : show info about PalmAcq settings')
+            print ("-q          : quiet: don't show commands and answers. Has to be first option.")
 
             print ('-------------------------------------')
             print ('Examples:')
             print ('python palmobs.py -f R')
 
             sys.exit()
-        elif opt in ("-v", "--version"):
+        if opt in ("-q", "--quiet"):
+            global QUIET
+            QUIET = True
+        if opt in ("-v", "--version"):
             # e.g. PALMACQ fw. v4.2.2 SM
             command('GV')
             # there come two lines, this cannot be handled here correctly
             print (lineread(ser,eol))
             # programmed not perfectly, so better quit here...
-            quit() 
+            #quit() 
         elif opt in ("-t", "--transparent"):
             # Transparent mode - this connects only to RS-485 port
             command('SP:R:'+obsbaud+',8,n,1,1')
             command('ST:R')
             a=command('SM:TRP')
             if a=='AM:TRP,001B':
-                print ("continuing...")
+                print ("PalmAcq: going to transparent mode...")
             else:
                 # this does not mean, that the connection wasn't made
                 # due to a timing problem
-                print ("no connection")
+                print ("PalmAcq: probably no connection when trying to enter transparent mode")
             # print firmware version and firmware date
             command('$01F')
         elif opt in ("-p", "--program"):
+            print ('PalmAcq: trying to enter command mode')
             # return from Transparent mode to PalmDAQ's Command mode
             ser.write(escFromTranspChars)
             command('SM:CMD')
@@ -147,8 +157,9 @@ def main(argv):
                 command('SF')
             elif arg in ['R','P','G','M','C']:
                 command('SF:'+arg)
+                print ('PalmAcq: entering forward mode "'+arg+'"')
             else:
-                print ('forward mode: SF: '+arg+': bad argument')
+                print ('PalmAcq: forward mode: SF: '+arg+': bad argument')
                 quit()
         elif opt in ("-g", "--gpsinfo"):
             # GPS sends amount of leap seconds, 2017 it was 18
@@ -162,10 +173,10 @@ def main(argv):
                     l = result.split('$PMTK557,')
                     if len(l) == 2:
                         leapsecond = int(l[1].split('.')[0])
-                        print ('Leapsecond according to GPS signal: '+ str(leapsecond))
+                        print ('PalmAcq: Leapsecond according to GPS signal: '+ str(leapsecond))
                 time.sleep(2)
                 if leapsecond < LEAPSECOND:
-                    print ('trying once again')
+                    print ('..trying once again')
         elif opt in ("-i", "--info"):
             command('GI:PORTS')
             command('GI:MC')
@@ -205,7 +216,6 @@ def main(argv):
                         z = float(z) * 2**-23 * GAINMAX
                         triggerflag = d[3][19]
                     else:
-                        # TODO ask Roman
                         pass
                     sup = d[3].split(':')
                     if len(sup) == 2:
@@ -235,6 +245,7 @@ def main(argv):
                     print (l)
             sys.exit()
     quit()
+    """
     if obs:
         #sending to obsDAQ makes sense only in transparent mode
         #command('CFG:01') - since 5.6.4
@@ -254,7 +265,7 @@ def main(argv):
         command('$01IR0')
 
         #command('BC:LIST')
-
+    """
 
 if __name__ == "__main__":
     main(sys.argv[1:])
