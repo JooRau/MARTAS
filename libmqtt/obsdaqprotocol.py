@@ -142,7 +142,7 @@ class obsdaqProtocol(LineReceiver):
             us = int(d[2][14:17]) * 1000
             timestamp = datetime(Y,M,D,h,m,s,us)
             if d[3][0] == '*':
-                GAINMAX = self.obsdaqconf.get('GAINMAX')
+                GAINMAX = 10 * 2**(self.obsdaqconf.get('CC'))
                 SCALE_X = self.obsdaqconf.get('SCALE_X')
                 SCALE_Y = self.obsdaqconf.get('SCALE_Y')
                 SCALE_Z = self.obsdaqconf.get('SCALE_Z')
@@ -168,10 +168,10 @@ class obsdaqProtocol(LineReceiver):
                 p = (int('0x'+sup[1][8:12],16) ^ 0x8000) - 0x8000
                 p = float(p) / 8000.0
                 p = int(round(p*1000)/1000)
-                q = (int('0x'+sup[1][8:12],16) ^ 0x8000) - 0x8000
+                q = (int('0x'+sup[1][12:16],16) ^ 0x8000) - 0x8000
                 q = float(q) / 8000.0
                 q = int(round(q*1000)/1000)
-                r = (int('0x'+sup[1][8:12],16) ^ 0x8000) - 0x8000
+                r = (int('0x'+sup[1][16:20],16) ^ 0x8000) - 0x8000
                 r = float(r) / 8000.0
                 r = int(round(r*1000)/1000)
             if self.debug:

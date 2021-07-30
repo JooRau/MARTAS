@@ -55,6 +55,11 @@ CC = '02'
     #   43 .. 32.0 Hz
     #   53 .. 38.4 Hz
     #   63 .. 64 Hz
+    #   72 .. 76.8 Hz
+    #   82 .. 128 Hz
+    #   92 .. 640 Hz
+    #   A1 .. 1280 Hz
+
 DD = '23'
 #DD = '63'
 
@@ -62,6 +67,14 @@ DD = '23'
     # command $AAPPeeeeffff
     # eeee ... triggering interval
     # ffff ... low-level time
+    # recommended by Mingeo (9.8304MHz quartz crystal, see Table 9)
+    #   DD EEEE FFFF Samples/s FilterFrequency
+    #   63 0BFF 026D 50Hz      64Hz 
+    #   72 09FF 01FD 60Hz      76.8Hz 
+    #   82 05FF 011D 100Hz     128Hz 
+    #   92 04AF 038D 128Hz     640Hz 
+    #   92 03FF 02DD 150Hz     640Hz 
+    #   92 02FF 01DD 200Hz     640Hz
 EEEE = '3C00'
 FFFF = '0600'
 #EEEE = '0BFF'

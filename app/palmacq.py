@@ -226,9 +226,9 @@ def main(argv):
                         temp = float(temp) / 128.
                         p = (int('0x'+sup[1][8:12],16) ^ 0x8000) - 0x8000
                         p = float(p) / 8000.0
-                        q = (int('0x'+sup[1][8:12],16) ^ 0x8000) - 0x8000
+                        q = (int('0x'+sup[1][12:16],16) ^ 0x8000) - 0x8000
                         q = float(q) / 8000.0
-                        r = (int('0x'+sup[1][8:12],16) ^ 0x8000) - 0x8000
+                        r = (int('0x'+sup[1][16:20],16) ^ 0x8000) - 0x8000
                         r = float(r) / 8000.0
                     print (str(timestamp)+'\t',end='')
                     print (str(x)+'\t',end='')
