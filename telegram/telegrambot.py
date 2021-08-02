@@ -19,6 +19,8 @@ sudo apt-get install fswebcam   # getting cam pictures
 
 TODO:
 
+PROXY: add proxy in configuration file - currently it is hardcoded
+
 add cronstop to regularly restart the bot (root)
 sudo crontab -e
 PATH=/bin/sh
@@ -98,6 +100,7 @@ class tgpar(object):
     tglogpath = '/var/log/magpy/telegrambot.log'
     version = '1.0.3'
     martasapp = '/home/cobs/MARTAS/app'
+    purpose = 'MARTAS'
 
 
 def GetConf(path, confdict={}):
@@ -233,6 +236,8 @@ stationcommands = {'getlog':'obtain last n lines of a log file\n  Command option
                    'plot sensorid':'get diagram of specific sensor by default of the last 24 h \n  Command options:\n  plot sensorid\n  plot sensorid starttime\n  plot sensorid starttime endtime', 
                    'sensors':'get sensors from config and check whether recent buffer data are existing\n  Command options:\n  sensors\n  sensor sensorid or sensors sensorname (provides some details on the selected sensor)',
                    'cam':'get a live picture from a connected camera',
+                   'figure1':'open a preconfigured figure',
+                   'figure2':'open an alternative figure',
                    'help':'print this list'}
 
 travistestrun = False
@@ -242,6 +247,7 @@ hiddencommands = {'reboot':'reboot the remote computer'}
 commandlist = {}
 commandlist['sensor'] = {'commands': ['sensors','sensor','Sensors','Sensor'], 'combination' : 'any'} 
 commandlist['hello'] = {'commands': ['hello','Hello'], 'combination' : 'any'}
+commandlist['imbot'] = {'commands': ['imbot','IMBOT'], 'combination' : 'any'}
 
 commandlist['system'] = {'commands': ['System','system'], 'combination' : 'any'}
 commandlist['martas'] = {'commands': ['Martas','martas','MARTAS'], 'combination' : 'any'}
@@ -271,7 +277,6 @@ confdict['camport'] = 'None'
 confdict['logging'] = 'stdout'
 confdict['loglevel'] = 'INFO'
 
-
 try:
     opts, args = getopt.getopt(sys.argv[1:],"hc:T",["config=","Test="])
 except getopt.GetoptError:
@@ -288,18 +293,41 @@ for opt, arg in opts:
         travistestrun = True
         telegramcfg = 'telegrambot.cfg'
 
+
 try:
+    proxy = ''
     tgconf = GetConf(telegramcfg, confdict=confdict)
     tglogger = setuplogger(name='telegrambot',loglevel=tgconf.get('loglevel'),path=tgconf.get('bot_logging').strip())
     if travistestrun:
         tglogger = setuplogger(name='telegrambot',loglevel='DEBUG',path='stdout')
     tglogpath = tgconf.get('bot_logging').strip()
     bot_id = tgconf.get('bot_id').strip()
+    purpose = tgconf.get('purpose')
     martasconfig = tgconf.get('martasconfig').strip()
+    if martasconfig:
+        martasconfig = martasconfig.strip()
     camport = tgconf.get('camport').strip()
-    martasapp = tgconf.get('martasapp').strip()
+    if camport:
+        camport = camport.strip()
+    martasapp = tgconf.get('martasapp')
+    if martasapp:
+        martasapp = martasapp.strip()
     martaspath = tgconf.get('martaspath')
-    marcosconfig = tgconf.get('marcosconfig').strip()
+    marcosconfig = tgconf.get('marcosconfig')
+    if marcosconfig:
+        marcosconfig = marcosconfig.strip()
+    proxy = tgconf.get('proxy')
+    if proxy:
+        proxy = proxy.strip()
+    proxyport = tgconf.get('proxyport')
+
+    if proxy:
+        print (" found proxy")
+        import urllib3
+        proxy_url="http://{}:{}".format(proxy,proxyport)
+        telepot.api._pools = {'default': urllib3.ProxyManager(proxy_url=proxy_url, num_pools=3, maxsize=10, retries=False, timeout=30),}
+        telepot.api._onetime_pool_spec = (urllib3.ProxyManager, dict(proxy_url=proxy_url, num_pools=1, maxsize=1, retries=False, timeout=30))
+        print (" ... established to {}".format(proxy_url))
 
     # Extract command lists
     for command in stationcommands:
@@ -317,6 +345,8 @@ try:
     tgpar.tmppath = tmppath
     tgpar.tglogpath = tglogpath
     tgpar.martasapp = martasapp
+    if purpose:
+        tgpar.purpose = purpose
     allusers = tgconf.get('allowed_users')
     if isinstance(allusers, list):
         allowed_users =  [str(el) for el in allusers]
@@ -326,7 +356,8 @@ try:
 except:
     print ("error while reading config file or writing to log file - check content and spaces")
 
-try:
+if tgpar.purpose in ['martas','Martas','MARTAS']:
+  try:
     conf = acs.GetConf(martasconfig)
     logpath = '/var/log/syslog'
     if not conf.get('logging').strip() in ['sys.stdout','stdout']:
@@ -344,7 +375,7 @@ try:
     mqttpath = conf.get('bufferdirectory')
     #apppath = conf.get('initdir').replace('init','app')
     tglogger.debug("Successfully obtained parameters from martas.cfg")
-except:
+  except:
     #print ("Configuration (martas.cfg) could not be extracted - aborting")
     if not travistestrun:
         tglogger.warning("Configuration (martas.cfg) could not be extracted - aborting")
@@ -523,27 +554,40 @@ def getspace():
     except:
         pass
 
+    return mesg
+
+def jobprocess(typ='MARTAS'):
     # Status of MARTAS MARCOS jobs
-    try:
-        mesg += "\n\nMARTAS process(es):\n----------"
-        proc = subprocess.Popen(['/etc/init.d/martas','status'], stdout=subprocess.PIPE)
-        lines = proc.stdout.readlines()
-        if vers=='3':
-            lines = [line.decode() for line in lines]
+    lines = []
+    print (" -checking {}".format(typ))
+    if typ in ['martas','Martas','MARTAS']:
         try:
+            mesg = "MARTAS process(es):\n----------"
+            proc = subprocess.Popen(['/etc/init.d/martas','status'], stdout=subprocess.PIPE)
+            lines = proc.stdout.readlines()
+        except:
+            pass
+    elif typ in ['marcos','Marcos','MARCOS']:
+        try:
+            mesg = "MARCOS process(es):\n----------"
             # get all collect-* files from init.d
             collectlist = glob.glob('/etc/init.d/collect-*')
             for coll in collectlist:
                 proc = subprocess.Popen([coll,'status'], stdout=subprocess.PIPE)
                 tmplines = proc.stdout.readlines()
-                if vers=='3':
-                    tmplines = [line.decode() for line in tmplines]
                 lines.extend(tmplines)
         except:
             pass
-        mesg += "\n{}".format(''.join(lines))
+    else:
+        mesg = "{} process(es):\n----------".format(typ)
+        lines = ['Requested job type','is not yet supported']
+    try:
+        if vers=='3':
+           lines = [line.decode() for line in lines]
     except:
         pass
+
+    mesg += "\n{}".format(''.join(lines))
 
     return mesg
 
@@ -851,6 +895,8 @@ def handle(msg):
                # -----------------------
                mesg = getspace()
                bot.sendMessage(chat_id, mesg)
+               mesg = jobprocess(typ=tgpar.purpose)
+               bot.sendMessage(chat_id, mesg)
             elif any([word in command for word in commandlist['system'].get('commands')]):
                # -----------------------
                # System information, software versions and martas marcos jobs
@@ -895,6 +941,20 @@ def handle(msg):
                # Send a figure
                # -----------------------
                bot.sendPhoto(chat_id, open(tgconf.get('fig2'),'rb'))
+            elif any([word in command for word in commandlist['imbot'].get('commands')]):
+               # -----------------------
+               # Send MARTAS process command
+               # -----------------------
+               bot.sendMessage(chat_id, "Sending result request to IMBOT...")
+               cmd = command.replace('martas','').replace('MARTAS','')
+               cmd = cmd.strip()
+               yearl = re.findall(r'\d+', cmd)
+               if len(yearl) > 0:
+                   command = "/usr/bin/python3 /home/pi/Software/IMBOT/imbot/quickreport.py -m /srv/DataCheck/analysis{a}.json -l /srv/DataCheck/IMBOT/{a}/level".format(a=yearl[-1])
+               else:
+                   command = "/usr/bin/python3 /home/pi/Software/IMBOT/imbot/quickreport.py -m /srv/DataCheck/analysis2020.json -l /srv/DataCheck/IMBOT/2020/level"
+               #subprocess.call([command])
+               os.system(command)
             elif any([word in command for word in commandlist['martas'].get('commands')]):
                # -----------------------
                # Send MARTAS process command

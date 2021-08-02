@@ -133,6 +133,8 @@ dateformat             :      %Y-%m-%d
 #       examples: "WIC_%s.bin"
 #                 "*%s*"
 #                 "WIC_%s.*"
+                  "*.[bin,asc,cdf]" -> define possible variants within brackets 
+                  "CALY*[LFZ,LFY,LFX]*%s*" -> brackets can also be used in filename in combiation with date
 #                 "WIC_2013.all" - no dateformat -> single file will be read
 filenamestructure      :      *%s*
 
@@ -168,6 +170,11 @@ forcedirectory     :      False
 
 # Zip data in archive directory
 zipdata            :      False
+
+
+# delete from remote source after successful transfer
+# (doesnt work with scp)
+deleteremote       :      False
 
 # Force data to the given revision number
 #forcerevision      :      0001
@@ -213,6 +220,7 @@ Changelog:
    - simple creation of MagPy archive without database tables (but making use of DB meta info)
    - just download files using ftp, scp, rsync etc
    - use a configuration file
+2021-07-17    RL complex placeholders for file identifications
 
 """
 
@@ -289,27 +297,61 @@ def die(child, errstr):
     child.terminate()
     exit(1)
 
-def ssh_getlist(source, filename, date, dateformat, maxdate, cred=[], pwd_required=True, timeout=60):
+def ssh_getlist(source, filename, date, dateformat, maxdate, cred=[], pwd_required=True, timeout=60, debug=False):
     """
     Method to extract filename with wildcards or date patterns from a directory listing
     """
     pathlist = []
-    filename = filename.replace('*','')
+    #filename = filename.replace('*','')
+    print (filename, date)
     if dateformat in ['','ctime','mtime']:
         filepat = filename
     else:
         filepat = filename % date
+
+    if debug:
+        print ("Running ssh_getlist for {}".format(filepat))
+
+    def _obtain_search_criteria(fn):
+        # BASIC search string
+        # fn = filepat
+        #grep = 'grep "%s"'
+        #search = 'find %s -type f{}{}'.format(find, grep)
+        optstr=""
+        grepstr=""
+        if fn.find("[") >= 0:
+            brack = fn[fn.find("[")+1:fn.find("]")]
+            opt = brack.split(',')
+            for o in opt:
+                if o == opt[-1]:
+                    optstr += ' -name "*{}*"'.format(o)
+                else:
+                    optstr += ' -name "*{}*" -o'.format(o)
+            fn = fn.replace(brack,'').replace('[]','*')
+        el = fn.split('*')
+        el = [e for e in el if len(e) > 0]
+        for e in el:
+            grepstr += ' | grep "{}"'.format(e)
+        return optstr, grepstr
+
+    opt, grep = _obtain_search_criteria(filepat)
+    #searchstr = 'find %s -type f{}{}'.format(opt, grep)
+    #grep += ' | grep -v "#"' #eventually add this exclude
+
     if not dateformat in ['','ctime','mtime']:
-        searchstr = 'find %s -type f | grep "%s"' % (source,filepat)
+        searchstr = 'find {} -type f{}{}'.format(source,opt,grep)
     elif dateformat in ['ctime','mtime']:
         mindate = (datetime.utcnow() - date).days
         maxdate = (datetime.utcnow() - maxdate).days
         if maxdate == 0:
-            searchstr = 'find {} -type f -{} -{} | grep "{}"'.format(source,dateformat, mindate,filepat)
+            searchstr = 'find {} -type f -{} -{}{}{}'.format(source,dateformat, mindate,opt,grep)
         else:
-            searchstr = 'find {} -type f -{} -{} -{} +{} | grep "{}"'.format(source,dateformat,mindate,dateformat,(mindate-maxdate),filepat)
+            searchstr = 'find {} -type f -{} -{} -{} +{}{}{}'.format(source,dateformat,mindate,dateformat,(mindate-maxdate),opt,grep)
     else:
-        searchstr = 'find {} -type f | grep "{}"'.format(source,filepat)
+        searchstr = 'find {} -type f{}{}'.format(source,opt,grep)
+
+    if debug:
+        print ("Searchstring to indentify files to copy: {}".format(searchstr))
 
     COMMAND= "ssh %s@%s '%s';" % (cred[0],cred[2],searchstr)
     child = pexpect.spawn(COMMAND)
@@ -436,6 +478,10 @@ def CheckConfiguration(config={},debug=False):
 
     dateformat = config.get('dateformat')
     filename = config.get('filenamestructure')
+    if isinstance(filename,list):
+        # necessary if brackets with options are contained
+        filename = ",".join(filename)
+    config['filenamestruc'] = filename
 
     if dateformat == "" and filename == "":
         print('   Specify either a fileformat: -f myformat.dat or a dateformat -d "%Y",ctime !')
@@ -522,7 +568,7 @@ def CreateTransferList(config={},datelist=[],debug=False):
     protocol = config.get('protocol','')
     source = config.get('source','')
     remotepath = config.get('sourcedatapath')
-    filename = config.get('filenamestructure')
+    filename = config.get('filenamestruc')
     user = config.get('rmuser')
     password = config.get('rmpassword')
     address = config.get('rmaddress')
@@ -564,11 +610,11 @@ def CreateTransferList(config={},datelist=[],debug=False):
         import pexpect
         if not dateformat in ['','ctime','mtime']:
             for date in datelist:
-                path = ssh_getlist(remotepath, filename, date, dateformat, datetime.utcnow(), cred=[user,password,address],pwd_required=pwd_required)
+                path = ssh_getlist(remotepath, filename, date, dateformat, datetime.utcnow(), cred=[user,password,address],pwd_required=pwd_required,debug=debug)
                 if len(path) > 0:
                     filelist.extend(path)
         else:
-            filelist = ssh_getlist(remotepath, filename, min(datelist), dateformat, max(datelist), cred=[user,password,address],pwd_required=pwd_required)
+            filelist = ssh_getlist(remotepath, filename, min(datelist), dateformat, max(datelist), cred=[user,password,address],pwd_required=pwd_required,debug=debug)
     elif protocol == '':
         if debug:
             print (" Local directory access ") 
@@ -615,12 +661,14 @@ def ObtainDatafiles(config={},filelist=[],debug=False):
     protocol = config.get('protocol')
     source = config.get('source')
     destination = config.get('destination')
+    deleteremote = config.get('deleteremote',False)
     user = config.get('rmuser')
     password = config.get('rmpassword')
     address = config.get('rmaddress')
     port = config.get('rmport')
     zipping = GetBool(config.get('zipdata'))
     forcelocal = GetBool(config.get('forcedirectory',False))
+    deleteopt = " "
 
     #filename = config.get('filenamestructure')
     #dateformat = config.get('dateformat')
@@ -639,6 +687,9 @@ def ObtainDatafiles(config={},filelist=[],debug=False):
 
 
     print("  Writing data to a local directory (or tmp)")
+
+    if deleteremote in [True,'True']:
+        print("  IMPORTANT: deleting remote data has been activated")
 
     if debug:
         print ("   Please Note: files will be copied to local filesystem even when debug is selected")
@@ -686,11 +737,17 @@ def ObtainDatafiles(config={},filelist=[],debug=False):
                 fhandle = open(destname, 'wb')
                 ftp.retrbinary('RETR ' + f, fhandle.write)
                 fhandle.close()
+                if deleteremote in [True,'True']:
+                    ftp.delete(f)
             elif protocol in ['scp','SCP']:
                 scptransfer(user+'@'+address+':'+f,destpath,password,timeout=600)
             elif protocol in ['rsync']:
                 # create a command line string with rsync ### please note,,, rsync requires password less comminuctaion
-                rsyncstring = "rsync -avz -e ssh {} {}".format(user+'@'+address+':'+f,destpath)
+                if deleteremote in [True,'True']:
+                    deleteopt = " --remove-source-files "
+                else:
+                    deleteopt = " "
+                rsyncstring = "rsync -avz -e ssh{}{} {}".format(deleteopt, user+'@'+address+':'+f,destpath)
                 print ("Executing:", rsyncstring)
                 subprocess.call(rsyncstring.split())
             elif protocol in ['html','HTML']:
@@ -698,6 +755,8 @@ def ObtainDatafiles(config={},filelist=[],debug=False):
             elif protocol in ['']:
                 if not os.path.exists(destname):
                     copyfile(f, destname)
+                    if deleteremote in [True,'True']:
+                        os.remove(f)
                 else:
                     print ("   -> raw file already existing - skipping write")
             if zipping:
@@ -1013,12 +1072,12 @@ def main(argv):
 
         # Obtain list of files to be transferred
         # -----------------------
-        try:
-            filelist = CreateTransferList(config=config,datelist=datelist,debug=debug)
-            moveon = True
-        except:
-            statusmsg[name] = 'could not obtain remote file list - aborting'
-            moveon = False
+        #try:
+        filelist = CreateTransferList(config=config,datelist=datelist,debug=debug)
+        moveon = True
+        #except:
+        #    statusmsg[name] = 'could not obtain remote file list - aborting'
+        #    moveon = False
 
         if moveon:
             # Obtain list of files to be transferred

@@ -34,6 +34,7 @@ Currently supported systems are:
 - ENV05 Environment sensors
 - MySQL/MariaDB databases
 - Dallas OneWire Sensors
+- DIGIBASE MCA Gamma sensors
 
 and basically all I2C Sensors and others connectable to a Arduino Microcontroller board
 (requiring a specific serial output format in the self written microcontroller program - appendix)
@@ -446,7 +447,7 @@ Use the installation script "install.addapps.sh" to install monitoring support. 
 
 To apply monitoring to watch contents of specfic log files change the following lines within the monitor.cfg configuration file:
 
-        logfile   :   /var/log/magpy/acrhive.log
+        logfile   :   /var/log/magpy/archive.log
         logtesttype   :   last
         logsearchmessage   :   SUCCESS
 
@@ -455,12 +456,75 @@ The above example will scan the archive.log file for a string "SUCCESS" in the l
 To schedule such monitoring use crontab e.g.
         5  *  *  *  *  /usr/bin/python3 /home/cobs/MARTAS/app/monitor.py -c /etc/martas/archivemonitor.cfg -n ARCHIVEMONITOR -j logfile  > /dev/NULL 2&>1
 
+#### 7.2.3 file date monitoring
+
+To apply monitoring to watch for recent files in a directory change the following lines within the monitor.cfg configuration file:
+
+        basedirectory      :   /home/user/datadirectory/*.cdf
+        defaultthreshold   :   600
+
+The above example will scan the directory '/home/user/datadirectory' and check if a file '*.cdf' younger then '600' seconds is present. (Ignorelist is not yet working properly as it is not applied to overall file selection)
+
+To schedule such monitoring use crontab e.g.
+        5  *  *  *  *  /usr/bin/python3 /home/cobs/MARTAS/app/monitor.py -c /etc/martas/uploadmonitor.cfg -n UPLOADMONITOR -j datafile  > /dev/NULL 2&>1
 
 
-### 7.3 Support for NAGIOS/ICINGA
+### 7.3 Sending notifications
+
+### 7.3.1 e-mail notifications
 
 
-### 7.4 Communicating with MARTAS
+In order to setup e-mail notifications the following steps need to be performed. Firstly, you should use the provided installer to generally setup monitoring and all necessary configuration files:
+
+        cd MARTAS/install
+        sudo bash install.addapps.sh
+
+This command will create a number of configuration files for notifications within the default folder /etc/martas.
+Secondly, it is necessary to locally save obsfuscated smtp server information on the MARTAS/MARCOS machine:
+
+        python3 addcred.py -t mail -c mymailservice -u info@mailservice.at -p secret -s smtp.mailservice.at -l 25
+
+Now we will need to update the configuration files accordingly.
+
+        sudo nano /etc/martas/mail.cfg
+        
+You only need to change the input for mailcred, and enter the shortcut for the mailservice defined with option c in the command above. Please also enter the other information as listed below with your correct data:
+
+        mailcred    :     mymailservice
+
+        From        :  info@mailservice.at
+        To          :  defaultreceiver@example.com
+        smtpserver  :  smtp.mailservice.at
+        porrt       :  25
+
+
+Finally, use the application testnote.py for testing the validity of your configuration (please update the following line with your paths):
+
+        python3 MARTAS/app/testnote.py -n email -m "Hello World" -c /etc/martas/mail.cfg -l TestMessage -p /home/user/test.log
+
+Pleasenote: calling testnote the first time will create the log file but don't send anything. From then on, a message will be send whenever you change the message content.
+
+### 7.3.1 telegram notifications
+
+MARTAS can send notifications directly to the [Telegram] messenger. You need a Telegram Bot and a user id to setup simple notifications. See section 7.5 for some hints of setting up such environment.
+
+For sending notifications yoz then just need to edit the basic configuration files:
+
+        # if not done install addapps
+        cd MARTAS/install
+        sudo bash install.addapps.sh
+
+        sudo nano /etc/martas/telegram.cfg
+        
+Insert your bot_id (token) and the user_id. Thats it. Then you can use testnote.py to for testing whether its working.
+
+        python3 MARTAS/app/testnote.py -n telegram -m "Hello World, I am here" -c /etc/martas/telegram.cfg -l TestMessage -p /home/user/test.log
+
+
+### 7.4 Support for NAGIOS/ICINGA
+
+
+### 7.5 Communicating with MARTAS
 
 MARTAS comes with a small communication routine, which allows interaction with the MARTAS server. In principle, you can chat with MARTAS and certain keywords will trigger reports, health stats, data requests, and many more. Communication routines are available for the [Telegram] messenger. In order to use these routines you need to setup a Telegram bot, referring to your MARTAS.
 
@@ -533,12 +597,12 @@ Script           |   Purpose                                         | Configura
 ---------------- | ------------------------------------------------- | -------------- | --------- | --------
 addcred.py       | Create credential information for scripts         |                | py3       | 8.2
 archive.py       | Read database tables and create archive files     | archive.cfg    | py3       | 8.3
-ardcomm.py       |       |     |    |
-file_download.py | Used to download files, store them in a raw directory amd construct archives/database inputs     |  collect.cfg   |  py3  |
-file_upload.py   | Used to upload files to any specified remote system using a protocol of your choise     |  upload.json   | py3   |
+ardcomm.py       | Communicating with arduino microcontroller        |                | py2/py3   | 8.4
+file_download.py | Used to download files, store them in a raw directory amd construct archives/database inputs     |  collect.cfg   |  py3  |  8.5
+file_upload.py   | Used to upload files to any specified remote system using a protocol of your choise     |  upload.json   | py3   | 8.6
 threshold.py     |      |     |    | 7.1
 monitor.py       |      |     |    | 7.2
-
+gamma.py         | Dealing with DIGIBASE gamma radiation acquisition and analysis | gamma.cfg | py3  | 8.7
 
 ### 8.2 addcred.py
 
@@ -598,7 +662,7 @@ blacklist       :    BLV,QUAKES,Sensor2,Sensor3,
 #### DESCRIPTION:
 Communication program for microcontrollers (here ARDUINO) e.g. used for reomte switching commands
 
-### 8.x file_download.py
+### 8.5 file_download.py
 
 #### DESCRIPTION:
 Downloads data by default in to an archive "raw" structure like /srv/archive/STATIONID/SENSORID/raw
@@ -646,10 +710,59 @@ file_donwload replaces the old collectfile.py routine which is still contained i
              forcerevision     :      0001
 
 
-### 8.y file_upload.py
+### 8.6 file_upload.py
 
 
+### 8.7 gamma.py
 
+#### DESCRIPTION:
+Working with Spectral radiometric data: The gamma script can be used to extract spectral measurements, reorganize the data and to analyze such spectral data as obtained by a DIGIBASE RH. 
+
+#### APPLICATION:
+Prerequisites are a DIGIBASE MCA and the appropriate linux software to run it.
+1) Please install linux drivers as provided and described here:
+   https://github.com/kjbilton/libdbaserh
+   
+2) Use a script to measure spectral data periodically (almost 1h)
+
+        #!/bin/bash
+        DATUM=$(date '+%Y-%m-%d')
+        SN=$(/home/pi/Software/digibase/dbaserh -l | grep : | cut -f 2)
+        NAME="/srv/mqtt/DIGIBASE_16272059_0001/raw/DIGIBASE_"$SN"_0001.Chn"
+        /home/pi/Software/digibase/dbaserh -set hvt 710
+        /home/pi/Software/digibase/dbaserh -q -hv on -start -i 3590 -t 3590 >> $NAME
+
+3) Use crontab to run this script every hour
+
+        0  *  *  *  *  root  bash /home/pi/Software/gammascript.sh > /var/log/magpy/gamma.log
+
+4) use gamma.py to extract spectral data and store it in daily json structures
+
+        58 5   *  *  *  root  $PYTHON /home/pi/SCRIPTS/gamma.py -p /srv/mqtt/DIGIBASE_16272059_0001/raw/DIGIBASE_16272059_0001.Chn  -c /home/pi/SCRIPTS/gamma.cfg -j extract,cleanup -o /srv/mqtt/DIGIBASE_16272059_0001/raw/ > /var/log/magpy/digiextract.log  2>&1
+
+4) use gamma.py to analyse spectral data and create graphs
+
+        30 6   *  *  *  root  $PYTHON /home/pi/SCRIPTS/gamma.py -p /srv/mqtt/DIGIBASE_16272059_0001/raw/ -j load,analyze -c /home/pi/SCRIPTS/gamma.cfg  > /var/log/magpy/digianalyse.log 2>&1
+
+
+### 8.7 testnote.py
+
+#### DESCRIPTION:
+Send notifications via email and telegram. testnote.py will create a log file with a message. Whenever, the logfile content (message) is changing, a notification will be send out to the defined receiver. In order to use notifications, please install addapps.
+
+#### OPTIONS:
+
+        -m            : message to be send
+        -n            : notification type: email, telegram or log
+        -c            : path to configuration file
+        -l            : key value of the log dictionary (value will be the message)
+        -p            : path to the logfile (will contains a dictionary)
+
+#### APPLICATION:
+
+        python3 testnote.py -n email -m "Hello World" -c /etc/martas/mail.cfg -l TestMessage -p /home/user/test.log
+        python3 testnote.py -n telegram -m "Hello World, I am here" -c /etc/martas/telegram.cfg -l TestMessage -p /home/user/test.log
+        python3 testnote.py -n log -m "Hello World again" -l TestMessage -p /home/user/test.log
 
 
 ## 9. Frequently asked questions
@@ -657,10 +770,10 @@ file_donwload replaces the old collectfile.py routine which is still contained i
 #### During installation of pip packages dependency problems are occuring
 
 If you observe such problems (problems occured in the past with matplotlib, numpy and/or scipy) then it is advisable
-to install the recommended packages for your system. Please remove the pip packages (pip remove..) and install system
+to install the recommended packages for your system using apt instead of pip. Please remove the pip packages (pip remove..) and install system
 packages using e.g. sudo apt install python3-scipy
 
-#### I want to send out data periodically from ma MARTAS acquisition machine using FTP or similar. Is this easily possible?
+#### I want to send out data periodically from a MARTAS acquisition machine using FTP or similar. Is this easily possible?
 
 use app/senddata.py within crontab:
 
@@ -696,6 +809,7 @@ app/senddata.py    |	Send data from MARTAS to any other machine using cron/sched
 app/sendip.py    |	Helper for checking and sending public IP  (via ftp) - OLD
 app/serialinit.py    |	Load initialization file (in init) to activate continuous serial data delivery (passive mode)
 app/telegramnote.py    |	Small program to send notes to a Telegram Messenger BOT. Useful for periodic information as an alternative to e-mail. 
+app/testnote.py    |	Small routine to test notification sending via email, telegram, etc. 
 app/testserial.py    |	Small routine to test serial communication. 
 app/threshold.py    |	Threshold tester (see section 7.1) 
 **core**  |  Core methods used by the most runtime scripts and applications 
