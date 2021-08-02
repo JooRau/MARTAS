@@ -22,8 +22,8 @@ from acquisitionsupport import GetConf2 as GetConf2
 
 
 # settings for PalmDaq
-port = '/dev/ttyUSB0'
-baudrate='57600'
+PORT = '/dev/ttyUSB0'
+BAUDRATE='57600'
 eol = '\r'
 
 
@@ -146,7 +146,14 @@ def main(argv):
     except getopt.GetoptError:
         print ('unknown option')
         sys.exit(2)
-    import time
+    port = PORT
+    baudrate = BAUDRATE
+    cc = CC
+    dd = DD
+    eeee = EEEE
+    ffff = FFFF
+    offset = OFFSET
+    fullscale = FULLSCALE
     for opt, arg in opts:
         if opt == '-h':
             print ('-------------------------------------')
@@ -182,29 +189,30 @@ def main(argv):
         if opt in ("-m"):
             configfile = os.path.abspath(arg)
             conf = GetConf2(configfile)
+            print (conf)
             port = conf.get('port')
             baudrate = conf.get('baudrate')
-            CC = str(conf.get('CC')).zfill(2)
-            DD = str(conf.get('DD')).zfill(2)
-            EEEE = str(conf.get('EEEE')).zfill(4)
-            FFFF = str(conf.get('FFFF')).zfill(4)
-            OFFSET = [conf.get('OFFSETX'),conf.get('OFFSETY'),conf.get('OFFSETZ')]
-            FULLSCALE = [conf.get('FULLSCALEX'),conf.get('FULLSCALEY'),conf.get('FULLSCALEZ')]
+            cc = str(conf.get('CC')).zfill(2)
+            dd = str(conf.get('DD')).zfill(2)
+            eeee = str(conf.get('EEEE')).zfill(4)
+            ffff = str(conf.get('FFFF')).zfill(4)
+            offset = [conf.get('OFFSETX'),conf.get('OFFSETY'),conf.get('OFFSETZ')]
+            fullscale = [conf.get('FULLSCALEX'),conf.get('FULLSCALEY'),conf.get('FULLSCALEZ')]
 
         ser = serial.Serial(port, baudrate=baudrate , parity='N', bytesize=8, stopbits=1, timeout=2)
 
         # some calculations
         FCLKdic = {'98':9.8304e6,'92':9.216e6,'76':7.68e6}
-        fclk = FCLKdic[FCLK]
+        fclkFreq = FCLKdic[FCLK]
         # factor for trigger timing parameters eeee and ffff
-        micros = 64./fclk
+        micros = 64./fclkFreq
         CCdic = {'02':10.,'03':5.,'04':2.5}
-        gain = CCdic[CC]
+        gain = CCdic[cc]
         DDdic = {'03':3.2,'13':6.4,'23':12.8,'33':19.2,'43':32.,'53':38.4,'63':64.,'72':76.8,'82':128.,'92':640.,'A1':1280.}
         # data output rate
-        drate = DDdic[DD] * FCLKdic[FCLK] / FCLKdic['98']
-        eeee = int('0x'+EEEE,16)*micros
-        ffff = int('0x'+FFFF,16)*micros
+        drate = DDdic[dd] * FCLKdic[FCLK] / FCLKdic['98']
+        eeeeTime = int('0x'+eeee,16)*micros
+        ffffTime = int('0x'+ffff,16)*micros
 
         if opt in ("-v", "--version"):
             answer = ser.read(10)
@@ -311,26 +319,26 @@ def main(argv):
             print ('ObsDaq: setting 24-bit channel configuration')
             # cc=02..+/-10V
             # dd=23..12.8Hz
-            command('$010WS0201'+CC+DD)
+            command('$010WS0201'+cc+dd)
             time.sleep(1)
-            command('$011WS0201'+CC+DD)
+            command('$011WS0201'+cc+dd)
             time.sleep(1)
-            command('$012WS0201'+CC+DD)
+            command('$012WS0201'+cc+dd)
             time.sleep(1)
 
             # calibration constants
             for i in range(3):
-                if OFFSET[i]:
+                if offset[i]:
                     print ('programming given offset calibration constant for channel '+str(i+1))
-                    command('$01'+str(i)+'WO'+OFFSET[i])
+                    command('$01'+str(i)+'WO'+offset[i])
             for i in range(3):
-                if FULLSCALE[i]:
+                if fullscale[i]:
                     print ('programming given full-scale calibration constant for channel '+str(i+1))
-                    command('$01'+str(i)+'WF'+FULLSCALE[i])
+                    command('$01'+str(i)+'WF'+fullscale[i])
             time.sleep(1)
             # execute an offset and full-scale self-calibration if necessary
             for i in range(3):
-                if not OFFSET[i] or not FULLSCALE[i]:
+                if not offset[i] or not fullscale[i]:
                     print ('executing an offset and full-scale self-calibration for channel '+str(i+1))
                     command('$01'+str(i)+'WCF0')
                     print ('calibrating...')
@@ -394,7 +402,7 @@ def main(argv):
             print ('setting 24-bit channel configuration')
             # cc=02..+/-10V
             # dd=23..12.8Hz
-            command('$01'+ch+'WS0201'+CC+DD)
+            command('$01'+ch+'WS0201'+cc+dd)
             time.sleep(1)
 
             print ('performing offset calibration of channel '+arg)
@@ -423,11 +431,11 @@ def main(argv):
             print ('setting 24-bit channel configuration')
             # cc=02..+/-10V
             # dd=23..12.8Hz
-            command('$010WS0201'+CC+DD)
+            command('$010WS0201'+cc+dd)
             time.sleep(1)
-            command('$011WS0201'+CC+DD)
+            command('$011WS0201'+cc+dd)
             time.sleep(1)
-            command('$012WS0201'+CC+DD)
+            command('$012WS0201'+cc+dd)
             time.sleep(1)
 
             print ('performing full-scale calibration of channel '+arg)
@@ -443,38 +451,38 @@ def main(argv):
             print ('')
             print ('Clock frequency:')
             print ('FCLK:\t'+FCLK)
-            print ('\t'+str(fclk/1000000.)+'MHz')
+            print ('\t'+str(fclkFreq/1000000.)+'MHz')
             print ('Gain:')
-            print ('CC:\t'+CC)
+            print ('CC:\t'+cc)
             print ('\t+/-'+str(gain)+'V')
             print ('Data output rate:')
-            print ('DD:\t'+DD)
+            print ('DD:\t'+dd)
             print ('\t'+str(1./drate)+" s")
             print ('\t'+str(drate)+' Hz')
             print ('triggering interval')
-            print ('EEEE:\t'+EEEE)
-            print ('\t'+str(eeee)+" s")
-            print ('\t'+str(1./eeee)+" Hz")
+            print ('EEEE:\t'+eeee)
+            print ('\t'+str(eeeeTime)+" s")
+            print ('\t'+str(1./eeeeTime)+" Hz")
             print ('low-level time')
-            print ('FFFF:\t'+FFFF)
-            print ('\t'+str(ffff)+" s")
-            print ('\t'+str(1./ffff)+" Hz")
+            print ('FFFF:\t'+ffff)
+            print ('\t'+str(ffffTime)+" s")
+            print ('\t'+str(1./ffffTime)+" Hz")
             # there are limitations in choosing DD, EEEE and FFFF:
-            if drate < 1./eeee:
+            if drate < 1./eeeeTime:
                 print ('WARNING: Digital filter output rate is smaller than the triggering frequency!')
-                print ('drate '+str(drate)+'Hz < 1./eeee '+str(1./eeee)+'Hz')
-            if 1./drate - 0.0011 > eeee:
+                print ('drate '+str(drate)+'Hz < 1./eeeeTime '+str(1./eeeeTime)+'Hz')
+            if 1./drate - 0.0011 > eeeeTime:
                 print ('WARNING: The difference of triggering interval and digital filter interval is smaller than 1.1ms!')
-                print ('1./drate '+str(1./drate)+'s - 0.0011s > eeee '+str(eeee)+'s')
-            if eeee - ffff < 0.00019:
-                print ('WARNING: Difference between triggering interval and low-level time is '+str(eeee-ffff)+'!')
-            if eeee - ffff < 1./drate:
+                print ('1./drate '+str(1./drate)+'s - 0.0011s > eeeeTime '+str(eeeeTime)+'s')
+            if eeeeTime - ffffTime < 0.00019:
+                print ('WARNING: Difference between triggering interval and low-level time is '+str(eeeeTime-ffffTime)+'!')
+            if eeeeTime - ffffTime < 1./drate:
                 print ('WARNING: Triggering interval - Low-level time is higher than the Digital filter output rate!')
 
         elif opt in ("-a", "--start"):
             print ('ObsDaq: starting acquisition')
             # set internal trigger timing (Table 9)
-            command('#01PP'+EEEE+FFFF)
+            command('#01PP'+eeee+ffff)
             # wait a second
             time.sleep(2)
 
