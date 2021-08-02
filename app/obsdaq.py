@@ -91,6 +91,7 @@ FULLSCALE = ['3231C0','32374B','323A7E']
 # please don't edit beyond this line
 # ----------------------------------
 
+global ser
 global QUIET
 QUIET = False
 
@@ -131,6 +132,7 @@ def send_command(ser,command,eol,hex=False):
 
 
 def command(call):
+    global ser
     global QUIET
     if not QUIET:
         print(call)
@@ -146,6 +148,8 @@ def main(argv):
     except getopt.GetoptError:
         print ('unknown option')
         sys.exit(2)
+
+    global ser
     port = PORT
     baudrate = BAUDRATE
     cc = CC
@@ -189,7 +193,6 @@ def main(argv):
         if opt in ("-m"):
             configfile = os.path.abspath(arg)
             conf = GetConf2(configfile)
-            print (conf)
             port = conf.get('port')
             baudrate = conf.get('baudrate')
             cc = str(conf.get('CC')).zfill(2)
@@ -234,7 +237,7 @@ def main(argv):
             stopped = False
             while not stopped:
                 # quick stop
-                answer, time = send_command(ser,'||||||||||||||||||||||','')
+                answer, actime = send_command(ser,'||||||||||||||||||||||','')
                 if answer:
                     print ('Answer from ObsDAQ:')
                     print (answer)

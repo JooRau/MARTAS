@@ -2,34 +2,34 @@
 
 MARTASPATH="/home/pi/MARTAS"
 APPPATH=$MARTASPATH"/app"
-CONF=$MARTASPATH"/conf/obsdaq.cfg"
 
 # set PalmAcq into idle mode (command mode)
-python $APPPATH/palmacq.py -m $CONF -qp
+python $APPPATH/palmacq.py -qp
 sleep 2
-python $APPPATH/palmacq.py -m $CONF -qp
+python $APPPATH/palmacq.py -qp
 sleep 2
+# TODO better
 # wait for GPS loopseconds=18
-python $APPPATH/palmacq.py -m $CONF -qg
+python $APPPATH/palmacq.py -qg
 
 # set PalmAcq into Transparent mode to access ObsDAQ
-python $APPPATH/palmacq.py -m $CONF -qt
+python $APPPATH/palmacq.py -qt
 sleep 2
 # stop ObsDAQ's acquisition, if running  
-python $APPPATH/obsdaq.py -m $CONF -qp
+python $APPPATH/obsdaq.py -qp
 sleep 5
-python $APPPATH/obsdaq.py -m $CONF -qp
+python $APPPATH/obsdaq.py -qp
 sleep 2
 # execute a self calibration resp. load calibration values
-python $APPPATH/obsdaq.py -m $CONF -qc
+python $APPPATH/obsdaq.py -qc
 sleep 2
 # start acquisition
-python $APPPATH/obsdaq.py -m $CONF -qa
+python $APPPATH/obsdaq.py -qa
 sleep 2
 # set PalmAcq into idle mode
-python $APPPATH/palmacq.py -m $CONF -qp
+python $APPPATH/palmacq.py -qp
 sleep 2
 # set PalmAcq into forward mode
-python $APPPATH/palmacq.py -m $CONF -q -d R
+python $APPPATH/palmacq.py -q -d R
 sleep 2
 

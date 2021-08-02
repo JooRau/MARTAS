@@ -28,12 +28,11 @@ from acquisitionsupport import GetConf2 as GetConf2
 
 
 # settings for PalmAcq
-port = '/dev/ttyUSB0'
-baudrate='57600'
+PORT = '/dev/ttyUSB0'
+BAUDRATE='57600'
 eol = '\r'
 # since beginning of 2017 there are 18 leap seconds. PalmAcq starts with 15 leap seconds.
 LEAPSECOND = 18
-ser = serial.Serial(port, baudrate=baudrate , parity='N', bytesize=8, stopbits=1, timeout=2)
 
 # settings for ObsDAQ
 #   only baudrate 19200 supported here 
@@ -47,6 +46,7 @@ GAINMAX = 10
 # please don't edit beyond this line
 # ----------------------------------
 
+global ser
 global QUIET
 QUIET = False
 
@@ -87,6 +87,7 @@ def send_command(ser,command,eol,hex=False):
 
 
 def command(call):
+    global ser
     global QUIET
     if not QUIET:
         print(call)
@@ -103,6 +104,10 @@ def main(argv):
     except getopt.GetoptError:
         print ('unknown option')
         sys.exit(2)
+
+    global ser
+    port = PORT
+    baudrate = BAUDRATE
     for opt, arg in opts:
         if opt == '-h':
             print ('-------------------------------------')
@@ -137,6 +142,9 @@ def main(argv):
             configfile = os.path.abspath(arg)
             conf = GetConf2(configfile)
             port = conf.get('port')
+
+        ser = serial.Serial(port, baudrate=baudrate , parity='N', bytesize=8, stopbits=1, timeout=2)
+
         if opt in ("-q", "--quiet"):
             global QUIET
             QUIET = True
