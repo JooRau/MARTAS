@@ -20,9 +20,6 @@ coredir = os.path.abspath(os.path.join(scriptpath, '..', 'core'))
 sys.path.insert(0, coredir)
 from acquisitionsupport import GetConf2 as GetConf2
 
-# path of config file
-#obsdaqconf=""
-obsdaqconfpath="/home/pi/MARTAS/conf/obsdaq.cfg"
 
 # settings for PalmDaq
 port = '/dev/ttyUSB0'
@@ -94,31 +91,6 @@ FULLSCALE = ['3231C0','32374B','323A7E']
 # please don't edit beyond this line
 # ----------------------------------
 
-# get constants from config file
-
-if not obsdaqconfpath=="":
-    conf = GetConf2(obsdaqconfpath)
-    CC = str(conf.get('CC')).zfill(2)
-    DD = str(conf.get('DD')).zfill(2)
-    EEEE = str(conf.get('EEEE')).zfill(4)
-    FFFF = str(conf.get('FFFF')).zfill(4)
-    OFFSET = [conf.get('OFFSETX'),conf.get('OFFSETY'),conf.get('OFFSETZ')]
-    FULLSCALE = [conf.get('FULLSCALEX'),conf.get('FULLSCALEY'),conf.get('FULLSCALEZ')]
-
-# some calculations
-
-FCLKdic = {'98':9.8304e6,'92':9.216e6,'76':7.68e6}
-fclk = FCLKdic[FCLK]
-# factor for trigger timing parameters eeee and ffff
-micros = 64./fclk
-CCdic = {'02':10.,'03':5.,'04':2.5}
-gain = CCdic[CC]
-DDdic = {'03':3.2,'13':6.4,'23':12.8,'33':19.2,'43':32.,'53':38.4,'63':64.,'72':76.8,'82':128.,'92':640.,'A1':1280.}
-# data output rate
-drate = DDdic[DD] * FCLKdic[FCLK] / FCLKdic['98']
-eeee = int('0x'+EEEE,16)*micros
-ffff = int('0x'+FFFF,16)*micros
-
 global QUIET
 QUIET = False
 
@@ -157,7 +129,6 @@ def send_command(ser,command,eol,hex=False):
     #print "Timediff", (receivetime-sendtime)*3600*24
     return response, num2date(meantime).replace(tzinfo=None)
 
-ser = serial.Serial(port, baudrate=baudrate , parity='N', bytesize=8, stopbits=1, timeout=2)
 
 def command(call):
     global QUIET
@@ -171,7 +142,7 @@ def command(call):
 
 def main(argv):
     try:
-        opts, args = getopt.getopt(argv,"hvcn:f:apsodiq",[])
+        opts, args = getopt.getopt(argv,"hvm:cn:f:apsodiq",[])
     except getopt.GetoptError:
         print ('unknown option')
         sys.exit(2)
@@ -186,10 +157,11 @@ def main(argv):
             print ('  python palmacq.py -t')
             print ('-------------------------------------')
             print ('Usage:')
-            print ('obsdaq.py -q -v -c -n channel -f channel -a -p -s -o -d -i')
+            print ('obsdaq.py -q -v -m config-file -c -n channel -f channel -a -p -s -o -d -i')
             print ('-------------------------------------')
             print ('Options:')
             print ('-v          : show version of ObsDAQ and quit')
+            print ('-m          : MARTAS compatible config file')
             print ('')
             print ('-c          : define calibration constants')
             print ('-n channel  : perform an offset system calibration (input must be 0) of channel 1-3')
@@ -200,13 +172,40 @@ def main(argv):
             print ('-s          : show output from serial line')
             print ('-o          : show the formatted output')
             print ('')
-            print ('-d          : show definitions made in this file')
+            print ('-d          : show definitions made in the code resp. config file')
             print ('-i          : show info about ObsDAQ settings')
             print ("-q          : quiet: don't show commands and answers. Has to be first option.")
             print ('-------------------------------------')
             print ('Examples:')
             print ('python obsdaq.py -t')
             sys.exit()
+        if opt in ("-m"):
+            configfile = os.path.abspath(arg)
+            conf = GetConf2(configfile)
+            port = conf.get('port')
+            baudrate = conf.get('baudrate')
+            CC = str(conf.get('CC')).zfill(2)
+            DD = str(conf.get('DD')).zfill(2)
+            EEEE = str(conf.get('EEEE')).zfill(4)
+            FFFF = str(conf.get('FFFF')).zfill(4)
+            OFFSET = [conf.get('OFFSETX'),conf.get('OFFSETY'),conf.get('OFFSETZ')]
+            FULLSCALE = [conf.get('FULLSCALEX'),conf.get('FULLSCALEY'),conf.get('FULLSCALEZ')]
+
+        ser = serial.Serial(port, baudrate=baudrate , parity='N', bytesize=8, stopbits=1, timeout=2)
+
+        # some calculations
+        FCLKdic = {'98':9.8304e6,'92':9.216e6,'76':7.68e6}
+        fclk = FCLKdic[FCLK]
+        # factor for trigger timing parameters eeee and ffff
+        micros = 64./fclk
+        CCdic = {'02':10.,'03':5.,'04':2.5}
+        gain = CCdic[CC]
+        DDdic = {'03':3.2,'13':6.4,'23':12.8,'33':19.2,'43':32.,'53':38.4,'63':64.,'72':76.8,'82':128.,'92':640.,'A1':1280.}
+        # data output rate
+        drate = DDdic[DD] * FCLKdic[FCLK] / FCLKdic['98']
+        eeee = int('0x'+EEEE,16)*micros
+        ffff = int('0x'+FFFF,16)*micros
+
         if opt in ("-v", "--version"):
             answer = ser.read(10)
             if answer:
@@ -220,7 +219,7 @@ def main(argv):
         if opt in ("-q", "--quiet"):
             global QUIET
             QUIET = True
-        elif opt in ("-p", "--stop"):
+        if opt in ("-p", "--stop"):
             # stop acquisition
             print('ObsDaq: trying to stop acquisition...')
             command('#01ST')

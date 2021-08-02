@@ -20,6 +20,13 @@ from matplotlib.dates import date2num, num2date
 import numpy as np
 import time
 
+# Relative import of core methods as long as martas is not configured as package
+scriptpath = os.path.dirname(os.path.realpath(__file__))
+coredir = os.path.abspath(os.path.join(scriptpath, '..', 'core'))
+sys.path.insert(0, coredir)
+from acquisitionsupport import GetConf2 as GetConf2
+
+
 # settings for PalmAcq
 port = '/dev/ttyUSB0'
 baudrate='57600'
@@ -29,11 +36,16 @@ LEAPSECOND = 18
 ser = serial.Serial(port, baudrate=baudrate , parity='N', bytesize=8, stopbits=1, timeout=2)
 
 # settings for ObsDAQ
+#   only baudrate 19200 supported here 
 obsbaud = '19200'
 escFromTranspChars = '\x00\x1b'
 # GAINMAX is 10 for +/-10V (cc=02) and 5 for +/-5V (cc=03), see WS command
 # needed only for option -o --output, no affect on data
 GAINMAX = 10
+
+# ----------------------------------
+# please don't edit beyond this line
+# ----------------------------------
 
 global QUIET
 QUIET = False
@@ -87,7 +99,7 @@ def command(call):
 
 def main(argv):
     try:
-        opts, args = getopt.getopt(argv,"hvtpfd:gsoiq",[])
+        opts, args = getopt.getopt(argv,"hvm:tpfd:gsoiq",[])
     except getopt.GetoptError:
         print ('unknown option')
         sys.exit(2)
@@ -98,10 +110,11 @@ def main(argv):
             print ('Sending data to PalmAcq resp. ObsDAQ')
             print ('-------------------------------------')
             print ('Usage:')
-            print ('palmobs.py -q -v -t -p -f -d [R/P/G] -g -s -i -o')
+            print ('palmobs.py -q -v -t -m config-file -p -f -d [R/P/G] -g -s -i -o')
             print ('-------------------------------------')
             print ('Options:')
             print ('-v          : show version of PalmAcq and quit')
+            print ('-m          : MARTAS compatible config file')
             print ('') 
             print ('-t          : enter Transparent mode')
             print ("-p          : exit Transparent mode, return to PalmAcq's Command mode")
@@ -119,8 +132,11 @@ def main(argv):
             print ('-------------------------------------')
             print ('Examples:')
             print ('python palmobs.py -f R')
-
             sys.exit()
+        if opt in ("-m"):
+            configfile = os.path.abspath(arg)
+            conf = GetConf2(configfile)
+            port = conf.get('port')
         if opt in ("-q", "--quiet"):
             global QUIET
             QUIET = True
