@@ -26,6 +26,7 @@ from datetime import datetime, timedelta
 from twisted.protocols.basic import LineReceiver
 from twisted.python import log
 from magpy.acquisition import acquisitionsupport as acs
+import math
 import serial # for initializing command
 import os,sys
 
@@ -104,6 +105,35 @@ class obsdaqProtocol(LineReceiver):
 
         # get obsdaq specific constants
         self.obsdaqconf = GetConf2(self.confdict.get('obsdaqconfpath'))
+        
+        self.headernames = '[{},{},{}]'.format(self.obsdaqconf.get('NAME_X'),self.obsdaqconf.get('NAME_Y'),self.obsdaqconf.get('NAME_Z'))
+        self.headerunits = '[{},{},{}]'.format(self.obsdaqconf.get('UNIT_X'),self.obsdaqconf.get('UNIT_Y'),self.obsdaqconf.get('UNIT_Z'))
+        CCdic = {'02':10.,'03':5.,'04':2.5}
+        self.gainmax = CCdic[str(self.obsdaqconf.get('CC')).zfill(2)]
+        self.scale_x = self.obsdaqconf.get('SCALE_X')
+        self.scale_y = self.obsdaqconf.get('SCALE_Y')
+        self.scale_z = self.obsdaqconf.get('SCALE_Z')
+        # least significant bit, smallest discrete value in given unit
+        self.lsb_x = 2**-23 * self.gainmax * self.scale_x
+        self.lsb_y = 2**-23 * self.gainmax * self.scale_y
+        self.lsb_z = 2**-23 * self.gainmax * self.scale_z
+        # rounding factor is used for rounding reasonably
+        self.rfactor_x = 1./(10**(round(math.log(self.lsb_x)/math.log(10))-1))
+        self.rfactor_y = 1./(10**(round(math.log(self.lsb_y)/math.log(10))-1))
+        self.rfactor_z = 1./(10**(round(math.log(self.lsb_z)/math.log(10))-1))
+        # header factor is used for sending decimal numbers as integer (or long)
+        self.factor_x = 1
+        if self.rfactor_x > 1.:
+            self.factor_x = int(self.rfactor_x)
+        self.factor_y = 1
+        if self.rfactor_y > 1.:
+            self.factor_y = int(self.rfactor_y)
+        self.factor_z = 1
+        if self.rfactor_z > 1.:
+            self.factor_z = int(self.rfactor_z)
+        self.headerfactors = '[{},{},{}]'.format(self.factor_x,self.factor_y,self.factor_z)
+
+
 
     def connectionMade(self):
         log.msg('  -> {} connected.'.format(self.sensor))
@@ -123,9 +153,9 @@ class obsdaqProtocol(LineReceiver):
         packcode = '6hLlll'
         # int!
         # TODO units, names and factors general 
-        header = "# MagPyBin %s %s %s %s %s %s %d" % (self.sensor, '[x,y,z]', '[X,Y,Z]', '[nT,nT,nT]', '[1000,1000,1000]', packcode, struct.calcsize(packcode))
+        header = "# MagPyBin %s %s %s %s %s %s %d" % (self.sensor, '[x,y,z]', self.headernames, self.headerunits, self.headerfactors, packcode, struct.calcsize(packcode))
         # TODO finish this
-        packcodeSup = '6hL....'
+        packcodeSup = '6hLlllll'
         headerSup = "# MagPyBin %s %s %s %s %s %s %d" % (self.sensor, '[var1,t2,var3,var4,var5]', '[Vcc,Telec,sup1,sup2,sup3]', '[V,degC,V,V,V]', '[1000,1000,1000,1000,1000]', packcode, struct.calcsize(packcode))
 
         if data.startswith(':R'):
@@ -142,16 +172,15 @@ class obsdaqProtocol(LineReceiver):
             us = int(d[2][14:17]) * 1000
             timestamp = datetime(Y,M,D,h,m,s,us)
             if d[3][0] == '*':
-                GAINMAX = 10 * 2**(self.obsdaqconf.get('CC'))
-                SCALE_X = self.obsdaqconf.get('SCALE_X')
-                SCALE_Y = self.obsdaqconf.get('SCALE_Y')
-                SCALE_Z = self.obsdaqconf.get('SCALE_Z')
                 x = (int('0x'+d[3][1:7],16) ^ 0x800000) - 0x800000
-                x = float(x) * 2**-23 * GAINMAX * SCALE_X
+                # old line:
+                #x = float(x) * 2**-23 * self.gainmax * self.scale_x
+                x = round( float(x) * self.lsb_x * self.rfactor_x) / self.rfactor_x
                 y = (int('0x'+d[3][7:13],16) ^ 0x800000) - 0x800000
-                y = float(y) * 2**-23 * GAINMAX * SCALE_Y
+                y = round( float(y) * self.lsb_y * self.rfactor_y) / self.rfactor_y
                 z = (int('0x'+d[3][13:19],16) ^ 0x800000) - 0x800000
-                z = float(z) * 2**-23 * GAINMAX * SCALE_Z
+                z = round( float(z) * self.lsb_z * self.rfactor_z) / self.rfactor_z
+                # (triggerflag not used here)
                 triggerflag = d[3][19]
             else:
                 typ = "none"
@@ -199,10 +228,9 @@ class obsdaqProtocol(LineReceiver):
         if not typ == "none":
             datearray = datetime2array(timestamp)
             try:
-                # x, y and z have [pT]
-                datearray.append(int(round(x)))
-                datearray.append(int(round(y)))
-                datearray.append(int(round(z)))
+                datearray.append(int(x * self.factor_x))
+                datearray.append(int(y * self.factor_y))
+                datearray.append(int(z * self.factor_z))
                 data_bin = struct.pack('<'+packcode,*datearray)
             except:
                 log.msg('{} protocol: Error while packing binary data'.format(self.sensordict.get('protocol')))
