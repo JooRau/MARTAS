@@ -69,6 +69,7 @@ class obsdaqProtocol(LineReceiver):
         self.printable = set(string.printable)
         #log.msg("  -> Sensor: {}".format(self.sensor))
         self.datalst = []
+        self.datalstSup = []
         self.datacnt = 0
         self.metacnt = 10
         self.errorcnt = {'time':0}
@@ -151,12 +152,15 @@ class obsdaqProtocol(LineReceiver):
         dontsavedata = False
 
         packcode = '6hLlll'
-        # int!
-        # TODO units, names and factors general 
         header = "# MagPyBin %s %s %s %s %s %s %d" % (self.sensor, '[x,y,z]', self.headernames, self.headerunits, self.headerfactors, packcode, struct.calcsize(packcode))
-        # TODO finish this
+        # TODO finish this (names, units and automatic rounding)
+        supplement = False
         packcodeSup = '6hLlllll'
-        headerSup = "# MagPyBin %s %s %s %s %s %s %d" % (self.sensor, '[var1,t2,var3,var4,var5]', '[Vcc,Telec,sup1,sup2,sup3]', '[V,degC,V,V,V]', '[1000,1000,1000,1000,1000]', packcode, struct.calcsize(packcode))
+        sensorSuplst = self.sensor.split('_')
+        if len(sensorSuplst) == 3:
+            sensoridSup = '_'.join([sensorSuplst[0]+'sup',sensorSuplst[1],sensorSuplst[2]])
+        
+        headerSup = "# MagPyBin %s %s %s %s %s %s %d" % (sensoridSup, '[var1,t2,var3,var4,var5]', '[Vcc,Telec,sup1,sup2,sup3]', '[V,degC,V,V,V]', '[1000,1000,1000,1000,1000]', packcode, struct.calcsize(packcode))
 
         if data.startswith(':R'):
             # :R,00,YYMMDD.hhmmss.sss,*xxxxxxyyyyyyzzzzzzt
@@ -184,7 +188,6 @@ class obsdaqProtocol(LineReceiver):
                 triggerflag = d[3][19]
             else:
                 typ = "none"
-            supplement = False
             sup = d[3].split(':')
             if len(sup) == 2:
                 supplement = True
@@ -234,14 +237,38 @@ class obsdaqProtocol(LineReceiver):
                 data_bin = struct.pack('<'+packcode,*datearray)
             except:
                 log.msg('{} protocol: Error while packing binary data'.format(self.sensordict.get('protocol')))
-
             if not self.confdict.get('bufferdirectory','') == '':
                 acs.dataToFile(self.confdict.get('bufferdirectory'), sensorid, filename, data_bin, header)
             returndata = ','.join(list(map(str,datearray)))
+
+            if supplement:
+                print('headerSup')
+                print(headerSup)
+                try:
+                    datearraySup = datetime2array(timestamp)
+                    datearraySup.append(int(voltage) *1000)
+                    datearraySup.append(int(temp) *1000)
+                    datearraySup.append(int(p) *1000)
+                    datearraySup.append(int(q) *1000)
+                    datearraySup.append(int(r) *1000)
+                    data_bin_Sup = struct.pack('<'+packcodeSup,*datearraySup)
+                except:
+                    log.msg('{} protocol: Error while packing binary supplement data'.format(self.sensordict.get('protocol')))
+                if not self.confdict.get('bufferdirectory','') == '':
+                    acs.dataToFile(self.confdict.get('bufferdirectory'), sensorid, filename, data_bin_Sup, headerSup)
+                returndataSup = ','.join(list(map(str,datearraySup)))
+                print('returndataSup')
+                print(returndataSup)
+            else:
+                returndataSup = ''
+                headerSup = ''
+
         else:
             returndata = ''
+            returndataSup = ''
+            headerSup = ''
 
-        return returndata, header
+        return returndata, header, returndataSup, headerSup
 
          
     def lineReceived(self, line):
@@ -249,11 +276,11 @@ class obsdaqProtocol(LineReceiver):
         # extract only ascii characters 
         line = ''.join(filter(lambda x: x in string.printable, line))
         ok = True
-        #try:
-        if 1:
-            data, head = self.processData(line)
-        #except:
-        else:
+        try:
+        #if 1:
+            data, head, dataSup, headSup = self.processData(line)
+        except:
+        #else:
             print('{}: Data seems not to be PalmAcq data: Looks like {}'.format(self.sensordict.get('protocol'),line))
             ok = False
 
@@ -264,11 +291,14 @@ class obsdaqProtocol(LineReceiver):
                 self.metacnt = 1 # send meta data with every block
                 if self.datacnt < coll:
                     self.datalst.append(data)
+                    self.datalstSup.append(dataSup)
                     self.datacnt += 1
                 else:
                     senddata = True
                     data = ';'.join(self.datalst)
+                    dataSup = ';'.join(self.datalstSup)
                     self.datalst = []
+                    self.datalstSup = []
                     self.datacnt = 0
             else:
                 senddata = True
@@ -279,6 +309,7 @@ class obsdaqProtocol(LineReceiver):
                     add = "SensorID:{},StationID:{},DataPier:{},SensorModule:{},SensorGroup:{},SensorDecription:{},DataTimeProtocol:{}".format( self.sensordict.get('sensorid',''),self.confdict.get('station',''),self.sensordict.get('pierid',''),self.sensordict.get('protocol',''),self.sensordict.get('sensorgroup',''),self.sensordict.get('sensordesc',''),self.sensordict.get('ptime','') )
                     self.client.publish(topic+"/dict", add, qos=self.qos)
                     self.client.publish(topic+"/meta", head, qos=self.qos)
+                    self.client.publish(topic+"/meta", headSup, qos=self.qos)
                 self.count += 1
                 if self.count >= self.metacnt:
                     self.count = 0
