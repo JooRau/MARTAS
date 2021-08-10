@@ -40,6 +40,10 @@ from acquisitionsupport import GetConf2 as GetConf2
 def datetime2array(t):
     return [t.year,t.month,t.day,t.hour,t.minute,t.second,t.microsecond]
 
+def getRoundingFactor(lsb):
+    # rounding factor is used for rounding reasonably
+    return 10**(-1*round(math.log(lsb)/math.log(10)-1))
+
 
 ## Mingeo ObsDAQ protocol
 ##
@@ -87,6 +91,9 @@ class obsdaqProtocol(LineReceiver):
         self.stopbits=int(sensordict.get('stopbits'))
         self.delimiter='\r'
         self.timeout=2 # should be rate dependend
+        sensorSuplst = self.sensor.split('_')
+        if len(sensorSuplst) == 3:
+            self.sensoridSup = '_'.join([sensorSuplst[0]+'sup',sensorSuplst[1],sensorSuplst[2]])
 
 
         # QOS
@@ -111,17 +118,17 @@ class obsdaqProtocol(LineReceiver):
         self.headerunits = '[{},{},{}]'.format(self.obsdaqconf.get('UNIT_X'),self.obsdaqconf.get('UNIT_Y'),self.obsdaqconf.get('UNIT_Z'))
         CCdic = {'02':10.,'03':5.,'04':2.5}
         self.gainmax = CCdic[str(self.obsdaqconf.get('CC')).zfill(2)]
-        self.scale_x = self.obsdaqconf.get('SCALE_X')
-        self.scale_y = self.obsdaqconf.get('SCALE_Y')
-        self.scale_z = self.obsdaqconf.get('SCALE_Z')
+        self.scale_x = float(self.obsdaqconf.get('SCALE_X'))
+        self.scale_y = float(self.obsdaqconf.get('SCALE_Y'))
+        self.scale_z = float(self.obsdaqconf.get('SCALE_Z'))
         # least significant bit, smallest discrete value in given unit
         self.lsb_x = 2**-23 * self.gainmax * self.scale_x
         self.lsb_y = 2**-23 * self.gainmax * self.scale_y
         self.lsb_z = 2**-23 * self.gainmax * self.scale_z
         # rounding factor is used for rounding reasonably
-        self.rfactor_x = 1./(10**(round(math.log(self.lsb_x)/math.log(10))-1))
-        self.rfactor_y = 1./(10**(round(math.log(self.lsb_y)/math.log(10))-1))
-        self.rfactor_z = 1./(10**(round(math.log(self.lsb_z)/math.log(10))-1))
+        self.rfactor_x = getRoundingFactor(self.lsb_x)
+        self.rfactor_y = getRoundingFactor(self.lsb_y)
+        self.rfactor_z = getRoundingFactor(self.lsb_z)
         # header factor is used for sending decimal numbers as integer (or long)
         self.factor_x = 1
         if self.rfactor_x > 1.:
@@ -134,6 +141,36 @@ class obsdaqProtocol(LineReceiver):
             self.factor_z = int(self.rfactor_z)
         self.headerfactors = '[{},{},{}]'.format(self.factor_x,self.factor_y,self.factor_z)
 
+        # get constants for Obsdaq's supplementary channels
+        self.headernamesSup = '[{},{},{},{},{}]'.format(self.obsdaqconf.get('NAME_V'),self.obsdaqconf.get('NAME_T'),self.obsdaqconf.get('NAME_P'),self.obsdaqconf.get('NAME_Q'),self.obsdaqconf.get('NAME_R'))
+        self.headerunitsSup = '[{},{},{},{},{}]'.format(self.obsdaqconf.get('UNIT_V'),self.obsdaqconf.get('UNIT_T'),self.obsdaqconf.get('UNIT_P'),self.obsdaqconf.get('UNIT_Q'),self.obsdaqconf.get('UNIT_R'))
+        self.scale_p = float(self.obsdaqconf.get('SCALE_P'))
+        self.scale_q = float(self.obsdaqconf.get('SCALE_Q'))
+        self.scale_r = float(self.obsdaqconf.get('SCALE_R'))
+        # least significant bit, smallest discrete value in given unit = 1V / 8000 * scale , see manual
+        self.lsb_p = 1./8000 * self.scale_p
+        self.lsb_q = 1./8000 * self.scale_q
+        self.lsb_r = 1./8000 * self.scale_r
+        # rounding factor is used for rounding reasonably
+        self.rfactor_p = getRoundingFactor(self.lsb_p)
+        self.rfactor_q = getRoundingFactor(self.lsb_q)
+        self.rfactor_r = getRoundingFactor(self.lsb_r)
+        # header factor is used for sending decimal numbers as integer (or long)
+        self.factor_p = 1
+        if self.rfactor_p > 1.:
+            self.factor_p = int(self.rfactor_p)
+        self.factor_q = 1
+        if self.rfactor_q > 1.:
+            self.factor_q = int(self.rfactor_q)
+        self.factor_r = 1
+        if self.rfactor_r > 1.:
+            self.factor_r = int(self.rfactor_r)
+        # Obsdaq's voltage and temperature are measured and calculated fixed, see manual
+        self.headerfactorsSup = '[{},{},{},{},{}]'.format('10000','1000',self.factor_x,self.factor_y,self.factor_z)
+
+        # get constants for Obsdaq's supplementary channels
+        self.headernamesSup = '[{},{},{},{},{}]'.format(self.obsdaqconf.get('NAME_V'),self.obsdaqconf.get('NAME_T'),self.obsdaqconf.get('NAME_P'),self.obsdaqconf.get('NAME_Q'),self.obsdaqconf.get('NAME_R'))
+        self.headerunitsSup = '[{},{},{},{},{}]'.format(self.obsdaqconf.get('UNIT_V'),self.obsdaqconf.get('UNIT_T'),self.obsdaqconf.get('UNIT_P'),self.obsdaqconf.get('UNIT_Q'),self.obsdaqconf.get('UNIT_R'))
 
 
     def connectionMade(self):
@@ -153,14 +190,10 @@ class obsdaqProtocol(LineReceiver):
 
         packcode = '6hLlll'
         header = "# MagPyBin %s %s %s %s %s %s %d" % (self.sensor, '[x,y,z]', self.headernames, self.headerunits, self.headerfactors, packcode, struct.calcsize(packcode))
-        # TODO finish this (names, units and automatic rounding)
         supplement = False
         packcodeSup = '6hLlllll'
-        sensorSuplst = self.sensor.split('_')
-        if len(sensorSuplst) == 3:
-            sensoridSup = '_'.join([sensorSuplst[0]+'sup',sensorSuplst[1],sensorSuplst[2]])
         
-        headerSup = "# MagPyBin %s %s %s %s %s %s %d" % (sensoridSup, '[var1,t2,var3,var4,var5]', '[Vcc,Telec,sup1,sup2,sup3]', '[V,degC,V,V,V]', '[1000,1000,1000,1000,1000]', packcode, struct.calcsize(packcode))
+        headerSup = "# MagPyBin %s %s %s %s %s %s %d" % (self.sensoridSup, '[var1,var2,var3,var4,var5]', self.headernamesSup, self.headerunitsSup, self.headerfactorsSup, packcode, struct.calcsize(packcode))
 
         if data.startswith(':R'):
             # :R,00,YYMMDD.hhmmss.sss,*xxxxxxyyyyyyzzzzzzt
@@ -193,19 +226,19 @@ class obsdaqProtocol(LineReceiver):
                 supplement = True
                 voltage = int(sup[1][0:4],16) ^ 0x8000 - 0x8000
                 voltage = float(voltage) * 2.6622e-3 + 9.15
-                voltage = round(voltage*1000)/1000.
+                voltage = round(voltage*10000)/10000.
                 temp = int(sup[1][4:8],16) ^ 0x8000 - 0x8000
                 temp = float(temp) / 128.
                 temp = round(temp*1000)/1000.
                 p = (int('0x'+sup[1][8:12],16) ^ 0x8000) - 0x8000
-                p = float(p) / 8000.0
-                p = int(round(p*1000)/1000)
+                p = float(p) / 8000.0 * self.scale_p + float(self.obsdaqconf.get('DIFF_P'))
+                p = round(p*self.rfactor_p)/self.rfactor_p
                 q = (int('0x'+sup[1][12:16],16) ^ 0x8000) - 0x8000
-                q = float(q) / 8000.0
-                q = int(round(q*1000)/1000)
+                q = float(q) / 8000.0 * self.scale_q + float(self.obsdaqconf.get('DIFF_Q'))
+                q = round(q*self.rfactor_q)/self.rfactor_q
                 r = (int('0x'+sup[1][16:20],16) ^ 0x8000) - 0x8000
-                r = float(r) / 8000.0
-                r = int(round(r*1000)/1000)
+                r = float(r) / 8000.0 * self.scale_r + float(self.obsdaqconf.get('DIFF_R'))
+                r = round(r*self.rfactor_r)/self.rfactor_r
             if self.debug:
                 log.msg(str(timestamp)+'\t',end='')
                 log.msg(str(x)+'\t',end='')
@@ -242,23 +275,19 @@ class obsdaqProtocol(LineReceiver):
             returndata = ','.join(list(map(str,datearray)))
 
             if supplement:
-                print('headerSup')
-                print(headerSup)
                 try:
                     datearraySup = datetime2array(timestamp)
-                    datearraySup.append(int(voltage) *1000)
-                    datearraySup.append(int(temp) *1000)
-                    datearraySup.append(int(p) *1000)
-                    datearraySup.append(int(q) *1000)
-                    datearraySup.append(int(r) *1000)
+                    datearraySup.append(int(voltage *10000))
+                    datearraySup.append(int(temp *1000))
+                    datearraySup.append(int(p *self.factor_p))
+                    datearraySup.append(int(q *self.factor_q))
+                    datearraySup.append(int(r *self.factor_r))
                     data_bin_Sup = struct.pack('<'+packcodeSup,*datearraySup)
                 except:
                     log.msg('{} protocol: Error while packing binary supplement data'.format(self.sensordict.get('protocol')))
                 if not self.confdict.get('bufferdirectory','') == '':
-                    acs.dataToFile(self.confdict.get('bufferdirectory'), sensorid, filename, data_bin_Sup, headerSup)
+                    acs.dataToFile(self.confdict.get('bufferdirectory'), self.sensoridSup, filename, data_bin_Sup, headerSup)
                 returndataSup = ','.join(list(map(str,datearraySup)))
-                print('returndataSup')
-                print(returndataSup)
             else:
                 returndataSup = ''
                 headerSup = ''
@@ -273,6 +302,7 @@ class obsdaqProtocol(LineReceiver):
          
     def lineReceived(self, line):
         topic = self.confdict.get('station') + '/' + self.sensordict.get('sensorid')
+        topicSup = self.confdict.get('station') + '/' + self.sensoridSup
         # extract only ascii characters 
         line = ''.join(filter(lambda x: x in string.printable, line))
         ok = True
@@ -305,11 +335,12 @@ class obsdaqProtocol(LineReceiver):
 
             if senddata:
                 self.client.publish(topic+"/data", data, qos=self.qos)
+                self.client.publish(topicSup+"/data", dataSup, qos=self.qos)
                 if self.count == 0:
                     add = "SensorID:{},StationID:{},DataPier:{},SensorModule:{},SensorGroup:{},SensorDecription:{},DataTimeProtocol:{}".format( self.sensordict.get('sensorid',''),self.confdict.get('station',''),self.sensordict.get('pierid',''),self.sensordict.get('protocol',''),self.sensordict.get('sensorgroup',''),self.sensordict.get('sensordesc',''),self.sensordict.get('ptime','') )
                     self.client.publish(topic+"/dict", add, qos=self.qos)
                     self.client.publish(topic+"/meta", head, qos=self.qos)
-                    self.client.publish(topic+"/meta", headSup, qos=self.qos)
+                    self.client.publish(topicSup+"/meta", headSup, qos=self.qos)
                 self.count += 1
                 if self.count >= self.metacnt:
                     self.count = 0
