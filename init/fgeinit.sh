@@ -20,6 +20,8 @@ python $APPPATH/obsdaq.py -m $CONF -qp
 sleep 5
 python $APPPATH/obsdaq.py -m $CONF -qp
 sleep 2
+# print serial number
+python $APPPATH/obsdaq.py -m $CONF -qi
 # execute a self calibration resp. load calibration values
 python $APPPATH/obsdaq.py -m $CONF -qc
 sleep 2

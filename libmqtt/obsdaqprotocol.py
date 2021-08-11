@@ -166,7 +166,7 @@ class obsdaqProtocol(LineReceiver):
         if self.rfactor_r > 1.:
             self.factor_r = int(self.rfactor_r)
         # Obsdaq's voltage and temperature are measured and calculated fixed, see manual
-        self.headerfactorsSup = '[{},{},{},{},{}]'.format('10000','1000',self.factor_x,self.factor_y,self.factor_z)
+        self.headerfactorsSup = '[{},{},{},{},{}]'.format('10000','1000',self.factor_p,self.factor_q,self.factor_r)
 
         # get constants for Obsdaq's supplementary channels
         self.headernamesSup = '[{},{},{},{},{}]'.format(self.obsdaqconf.get('NAME_V'),self.obsdaqconf.get('NAME_T'),self.obsdaqconf.get('NAME_P'),self.obsdaqconf.get('NAME_Q'),self.obsdaqconf.get('NAME_R'))

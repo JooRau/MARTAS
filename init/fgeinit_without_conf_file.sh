@@ -8,7 +8,6 @@ python $APPPATH/palmacq.py -qp
 sleep 2
 python $APPPATH/palmacq.py -qp
 sleep 2
-# TODO better
 # wait for GPS loopseconds=18
 python $APPPATH/palmacq.py -qg
 
@@ -20,6 +19,8 @@ python $APPPATH/obsdaq.py -qp
 sleep 5
 python $APPPATH/obsdaq.py -qp
 sleep 2
+# print serial number
+python $APPPATH/obsdaq.py -qi
 # execute a self calibration resp. load calibration values
 python $APPPATH/obsdaq.py -qc
 sleep 2

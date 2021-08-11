@@ -199,8 +199,8 @@ def main(argv):
             dd = str(conf.get('DD')).zfill(2)
             eeee = str(conf.get('EEEE')).zfill(4)
             ffff = str(conf.get('FFFF')).zfill(4)
-            offset = [conf.get('OFFSETX'),conf.get('OFFSETY'),conf.get('OFFSETZ')]
-            fullscale = [conf.get('FULLSCALEX'),conf.get('FULLSCALEY'),conf.get('FULLSCALEZ')]
+            offset = [str(conf.get('OFFSETX')),str(conf.get('OFFSETY')),str(conf.get('OFFSETZ'))]
+            fullscale = [str(conf.get('FULLSCALEX')),str(conf.get('FULLSCALEY')),str(conf.get('FULLSCALEZ'))]
 
         ser = serial.Serial(port, baudrate=baudrate , parity='N', bytesize=8, stopbits=1, timeout=2)
 
