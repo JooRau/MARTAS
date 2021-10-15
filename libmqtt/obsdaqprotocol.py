@@ -114,8 +114,8 @@ class obsdaqProtocol(LineReceiver):
         # get obsdaq specific constants
         self.obsdaqconf = GetConf2(self.confdict.get('obsdaqconfpath'))
         
-        self.headernames = '[{},{},{}]'.format(self.obsdaqconf.get('NAME_X'),self.obsdaqconf.get('NAME_Y'),self.obsdaqconf.get('NAME_Z'))
-        self.headerunits = '[{},{},{}]'.format(self.obsdaqconf.get('UNIT_X'),self.obsdaqconf.get('UNIT_Y'),self.obsdaqconf.get('UNIT_Z'))
+        self.headernames = '[{},{},{},{}]'.format(self.obsdaqconf.get('NAME_X'),self.obsdaqconf.get('NAME_Y'),self.obsdaqconf.get('NAME_Z'),'ntptime')
+        self.headerunits = '[{},{},{},{}]'.format(self.obsdaqconf.get('UNIT_X'),self.obsdaqconf.get('UNIT_Y'),self.obsdaqconf.get('UNIT_Z'),'none')
         CCdic = {'02':10.,'03':5.,'04':2.5}
         self.gainmax = CCdic[str(self.obsdaqconf.get('CC')).zfill(2)]
         self.scale_x = float(self.obsdaqconf.get('SCALE_X'))
@@ -139,7 +139,7 @@ class obsdaqProtocol(LineReceiver):
         self.factor_z = 1
         if self.rfactor_z > 1.:
             self.factor_z = int(self.rfactor_z)
-        self.headerfactors = '[{},{},{}]'.format(self.factor_x,self.factor_y,self.factor_z)
+        self.headerfactors = '[{},{},{},{}]'.format(self.factor_x,self.factor_y,self.factor_z,1)
 
         # get constants for Obsdaq's supplementary channels
         self.headernamesSup = '[{},{},{},{},{}]'.format(self.obsdaqconf.get('NAME_V'),self.obsdaqconf.get('NAME_T'),self.obsdaqconf.get('NAME_P'),self.obsdaqconf.get('NAME_Q'),self.obsdaqconf.get('NAME_R'))
@@ -188,8 +188,8 @@ class obsdaqProtocol(LineReceiver):
         datearray = []
         dontsavedata = False
 
-        packcode = '6hLlll'
-        header = "# MagPyBin %s %s %s %s %s %s %d" % (self.sensor, '[x,y,z]', self.headernames, self.headerunits, self.headerfactors, packcode, struct.calcsize(packcode))
+        packcode = '6hLlll6hL'
+        header = "# MagPyBin %s %s %s %s %s %s %d" % (self.sensor, '[x,y,z,sectime]', self.headernames, self.headerunits, self.headerfactors, packcode, struct.calcsize(packcode))
         supplement = False
         packcodeSup = '6hLlllll'
         
@@ -263,12 +263,16 @@ class obsdaqProtocol(LineReceiver):
 
         if not typ == "none":
             datearray = datetime2array(timestamp)
-            try:
+            if 1:
+            #try:
                 datearray.append(int(x * self.factor_x))
                 datearray.append(int(y * self.factor_y))
                 datearray.append(int(z * self.factor_z))
+                # add secondary time (NTP-time)
+                datearray.extend(datetime2array(currenttime))
                 data_bin = struct.pack('<'+packcode,*datearray)
-            except:
+            #except:
+            else:
                 log.msg('{} protocol: Error while packing binary data'.format(self.sensordict.get('protocol')))
             if not self.confdict.get('bufferdirectory','') == '':
                 acs.dataToFile(self.confdict.get('bufferdirectory'), sensorid, filename, data_bin, header)
@@ -306,11 +310,11 @@ class obsdaqProtocol(LineReceiver):
         # extract only ascii characters 
         line = ''.join(filter(lambda x: x in string.printable, line))
         ok = True
-        try:
-        #if 1:
+        #try:
+        if 1:
             data, head, dataSup, headSup = self.processData(line)
-        except:
-        #else:
+        #except:
+        else:
             print('{}: Data seems not to be PalmAcq data: Looks like {}'.format(self.sensordict.get('protocol'),line))
             ok = False
 
